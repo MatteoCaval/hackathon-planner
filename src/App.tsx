@@ -3,6 +3,7 @@ import { Container, Navbar, Button } from 'react-bootstrap';
 import Sidebar from './components/Sidebar';
 import DestinationView from './components/DestinationView';
 import AddDestinationModal from './components/AddDestinationModal';
+import DataPersistence from './components/DataPersistence';
 import { useLocalStorage } from './useLocalStorage';
 import { Destination } from './types';
 import { FaPlane, FaPlus } from 'react-icons/fa';
@@ -40,16 +41,27 @@ function App() {
       }
   };
 
+  const handleImport = (data: Destination[]) => {
+    setDestinations(data);
+    if (data.length > 0) {
+        setActiveId(data[0].id);
+    } else {
+        setActiveId(null);
+    }
+  };
+
   return (
     <div className="d-flex flex-column vh-100">
       <Navbar className="flex-shrink-0 z-3 border-bottom bg-white">
         <Container fluid className="px-4">
-          <Navbar.Brand className="text-primary d-flex align-items-center gap-2 fw-bold">
+          <Navbar.Brand className="text-primary d-flex align-items-center gap-2 fw-bold me-auto">
              <div className="bg-primary text-white rounded p-1 d-flex align-items-center justify-content-center" style={{ width: '32px', height: '32px' }}>
                 <FaPlane size={18} />
              </div>
              Hackathon Planner
           </Navbar.Brand>
+          
+          <DataPersistence destinations={destinations} onImport={handleImport} />
         </Container>
       </Navbar>
       
