@@ -1,16 +1,18 @@
 import { useState, useEffect } from 'react';
-import { Container, Navbar } from 'react-bootstrap';
+import { Container, Navbar, Button } from 'react-bootstrap';
 import Sidebar from './components/Sidebar';
 import DestinationView from './components/DestinationView';
+import AddDestinationModal from './components/AddDestinationModal';
 import { useLocalStorage } from './useLocalStorage';
 import { Destination } from './types';
-import { FaPlane } from 'react-icons/fa';
+import { FaPlane, FaPlus } from 'react-icons/fa';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'leaflet/dist/leaflet.css';
 
 function App() {
   const [destinations, setDestinations] = useLocalStorage<Destination[]>('hackathon-destinations', []);
   const [activeId, setActiveId] = useState<string | null>(null);
+  const [showAddModal, setShowAddModal] = useState(false);
 
   // Auto-select first if none selected and list not empty
   useEffect(() => {
@@ -56,7 +58,7 @@ function App() {
           destinations={destinations} 
           activeId={activeId} 
           onSelect={setActiveId} 
-          onAdd={handleAddDestination}
+          onAddClick={() => setShowAddModal(true)}
           onRemove={handleRemoveDestination}
         />
         
@@ -72,11 +74,20 @@ function App() {
                  <FaPlane size={48} className="text-primary opacity-50" />
               </div>
               <h3 className="fw-light">Ready for takeoff?</h3>
-              <p>Select or add a destination from the sidebar to start planning.</p>
+              <p className="mb-4">Select or add a destination from the sidebar to start planning.</p>
+              <Button variant="primary" size="lg" onClick={() => setShowAddModal(true)}>
+                <FaPlus className="me-2" /> Start Planning
+              </Button>
             </div>
           )}
         </main>
       </div>
+
+      <AddDestinationModal 
+        show={showAddModal} 
+        onHide={() => setShowAddModal(false)} 
+        onAdd={handleAddDestination} 
+      />
     </div>
   );
 }
