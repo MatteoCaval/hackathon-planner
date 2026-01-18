@@ -76,12 +76,21 @@ const FlightManager: React.FC<Props> = ({ flights, onChange }) => {
                         size="sm" 
                         type="date"
                         value={newFlight.startDate || ''} 
-                        onChange={e => setNewFlight({...newFlight, startDate: e.target.value})} 
+                        onChange={e => {
+                            const newStart = e.target.value;
+                            setNewFlight(prev => ({
+                                ...prev, 
+                                startDate: newStart,
+                                // Reset end date if it's before the new start date
+                                endDate: prev.endDate && prev.endDate < newStart ? '' : prev.endDate
+                            }));
+                        }} 
                         />
                         <Form.Control 
                         size="sm" 
                         type="date"
                         value={newFlight.endDate || ''} 
+                        min={newFlight.startDate || ''}
                         onChange={e => setNewFlight({...newFlight, endDate: e.target.value})} 
                         />
                     </div>

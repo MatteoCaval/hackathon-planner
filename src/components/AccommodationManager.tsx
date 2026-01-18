@@ -118,12 +118,21 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange }) => 
                     size="sm" 
                     type="date"
                     value={newAcc.startDate || ''} 
-                    onChange={e => setNewAcc({...newAcc, startDate: e.target.value})} 
+                    onChange={e => {
+                        const newStart = e.target.value;
+                        setNewAcc(prev => ({
+                            ...prev, 
+                            startDate: newStart,
+                            // Reset end date if it's before the new start date
+                            endDate: prev.endDate && prev.endDate < newStart ? '' : prev.endDate
+                        }));
+                    }} 
                     />
                     <Form.Control 
                     size="sm" 
                     type="date"
                     value={newAcc.endDate || ''} 
+                    min={newAcc.startDate || ''}
                     onChange={e => setNewAcc({...newAcc, endDate: e.target.value})} 
                     />
                 </div>
