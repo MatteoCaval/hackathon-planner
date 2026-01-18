@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Table, Button, Form, Card } from 'react-bootstrap';
 import { v4 as uuidv4 } from 'uuid';
 import { Flight } from '../types';
+import { FaTrash, FaExternalLinkAlt, FaPlus, FaPlaneDeparture } from 'react-icons/fa';
 
 interface Props {
   flights: Flight[];
@@ -30,62 +31,76 @@ const FlightManager: React.FC<Props> = ({ flights, onChange }) => {
   };
 
   return (
-    <Card className="mb-4">
-      <Card.Header>Flights</Card.Header>
-      <Card.Body>
-        <Table striped bordered hover size="sm">
-          <thead>
+    <Card className="mb-4 h-100">
+      <Card.Header className="d-flex align-items-center gap-2 bg-white">
+        <FaPlaneDeparture className="text-primary" />
+        <span className="h6 mb-0">Flight Options</span>
+      </Card.Header>
+      <Card.Body className="p-0">
+        <Table hover responsive className="mb-0 align-middle">
+          <thead className="bg-light">
             <tr>
-              <th>Link</th>
-              <th>Dates</th>
-              <th>Price/Person (€)</th>
-              <th>Action</th>
+              <th style={{ width: '40%' }}>Dates & Link</th>
+              <th style={{ width: '30%' }}>Price/Person</th>
+              <th style={{ width: '10%' }}></th>
             </tr>
           </thead>
           <tbody>
             {flights.map(f => (
               <tr key={f.id}>
-                <td><a href={f.link} target="_blank" rel="noreferrer">Link</a></td>
-                <td>{f.startDate} to {f.endDate}</td>
-                <td>€{f.pricePerPerson}</td>
-                <td><Button variant="danger" size="sm" onClick={() => handleRemove(f.id)}>Remove</Button></td>
+                <td>
+                    <div className="fw-bold text-dark">{f.startDate} <span className="text-muted fw-normal mx-1">to</span> {f.endDate}</div>
+                    <a href={f.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-flex align-items-center gap-1 mt-1">
+                        View Deal <FaExternalLinkAlt size={10} />
+                    </a>
+                </td>
+                <td className="fw-bold text-primary">€{f.pricePerPerson}</td>
+                <td className="text-end">
+                    <Button variant="link" className="text-danger p-0" onClick={() => handleRemove(f.id)}>
+                        <FaTrash />
+                    </Button>
+                </td>
               </tr>
             ))}
-            <tr>
+            <tr className="bg-light border-top">
               <td>
-                <Form.Control 
-                  size="sm" 
-                  placeholder="Link" 
-                  value={newFlight.link || ''} 
-                  onChange={e => setNewFlight({...newFlight, link: e.target.value})} 
-                />
-              </td>
-              <td>
-                <div className="d-flex gap-1">
+                <div className="d-flex flex-column gap-2">
                     <Form.Control 
                     size="sm" 
-                    type="date"
-                    value={newFlight.startDate || ''} 
-                    onChange={e => setNewFlight({...newFlight, startDate: e.target.value})} 
+                    placeholder="https://..." 
+                    value={newFlight.link || ''} 
+                    onChange={e => setNewFlight({...newFlight, link: e.target.value})} 
                     />
-                    <Form.Control 
-                    size="sm" 
-                    type="date"
-                    value={newFlight.endDate || ''} 
-                    onChange={e => setNewFlight({...newFlight, endDate: e.target.value})} 
-                    />
+                    <div className="d-flex gap-1">
+                        <Form.Control 
+                        size="sm" 
+                        type="date"
+                        value={newFlight.startDate || ''} 
+                        onChange={e => setNewFlight({...newFlight, startDate: e.target.value})} 
+                        />
+                        <Form.Control 
+                        size="sm" 
+                        type="date"
+                        value={newFlight.endDate || ''} 
+                        onChange={e => setNewFlight({...newFlight, endDate: e.target.value})} 
+                        />
+                    </div>
                 </div>
               </td>
-              <td>
+              <td style={{ verticalAlign: 'top' }}>
                 <Form.Control 
                   size="sm" 
                   type="number" 
-                  placeholder="Price" 
+                  placeholder="Price €" 
                   value={newFlight.pricePerPerson || ''} 
                   onChange={e => setNewFlight({...newFlight, pricePerPerson: Number(e.target.value)})} 
                 />
               </td>
-              <td><Button size="sm" onClick={handleAdd}>Add</Button></td>
+              <td className="text-end" style={{ verticalAlign: 'top' }}>
+                  <Button size="sm" variant="primary" onClick={handleAdd} disabled={!newFlight.link || !newFlight.pricePerPerson}>
+                    <FaPlus />
+                  </Button>
+              </td>
             </tr>
           </tbody>
         </Table>

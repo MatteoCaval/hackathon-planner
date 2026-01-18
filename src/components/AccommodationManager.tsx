@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Table, Button, Form, Card } from 'react-bootstrap';
 import { v4 as uuidv4 } from 'uuid';
 import { Accommodation } from '../types';
+import { FaTrash, FaEdit, FaSave, FaExternalLinkAlt, FaPlus, FaHotel } from 'react-icons/fa';
 
 interface Props {
   accommodations: Accommodation[];
@@ -42,23 +43,29 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange }) => 
   };
 
   return (
-    <Card className="mb-4">
-      <Card.Header>Accommodation</Card.Header>
-      <Card.Body>
-        <Table striped bordered hover size="sm">
-          <thead>
+    <Card className="mb-4 h-100">
+      <Card.Header className="d-flex align-items-center gap-2 bg-white">
+        <FaHotel className="text-primary" />
+        <span className="h6 mb-0">Accommodation Options</span>
+      </Card.Header>
+      <Card.Body className="p-0">
+        <Table hover responsive className="mb-0 align-middle">
+          <thead className="bg-light">
             <tr>
-              <th>Description</th>
-              <th>Link</th>
-              <th>Total Price (€)</th>
-              <th>Action</th>
+              <th style={{ width: '50%' }}>Description & Link</th>
+              <th style={{ width: '30%' }}>Total Price</th>
+              <th style={{ width: '20%' }}></th>
             </tr>
           </thead>
           <tbody>
             {accommodations.map(a => (
               <tr key={a.id}>
-                <td>{a.description}</td>
-                <td><a href={a.link} target="_blank" rel="noreferrer">Link</a></td>
+                <td>
+                    <div className="fw-bold text-dark">{a.description}</div>
+                    <a href={a.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-flex align-items-center gap-1 mt-1">
+                        View Property <FaExternalLinkAlt size={10} />
+                    </a>
+                </td>
                 <td>
                     {editId === a.id ? (
                         <div className="d-flex gap-2">
@@ -68,49 +75,56 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange }) => 
                                 value={editPrice} 
                                 onChange={e => setEditPrice(Number(e.target.value))} 
                              />
-                             <Button size="sm" variant="success" onClick={() => saveEdit(a.id)}>Save</Button>
+                             <Button size="sm" variant="success" onClick={() => saveEdit(a.id)}><FaSave /></Button>
                         </div>
                     ) : (
-                        <span>€{a.totalPrice}</span>
+                        <span className="fw-bold text-primary">€{a.totalPrice}</span>
                     )}
                 </td>
-                <td>
+                <td className="text-end">
                     {editId !== a.id && (
                         <>
-                            <Button variant="secondary" size="sm" className="me-1" onClick={() => startEdit(a)}>Edit</Button>
-                            <Button variant="danger" size="sm" onClick={() => handleRemove(a.id)}>Remove</Button>
+                            <Button variant="link" className="text-secondary p-0 me-3" onClick={() => startEdit(a)}>
+                                <FaEdit />
+                            </Button>
+                            <Button variant="link" className="text-danger p-0" onClick={() => handleRemove(a.id)}>
+                                <FaTrash />
+                            </Button>
                         </>
                     )}
                 </td>
               </tr>
             ))}
-            <tr>
+            <tr className="bg-light border-top">
               <td>
                 <Form.Control 
                   size="sm" 
-                  placeholder="Description" 
+                  placeholder="Description (e.g. Airbnb near center)" 
                   value={newAcc.description || ''} 
                   onChange={e => setNewAcc({...newAcc, description: e.target.value})} 
+                  className="mb-2"
                 />
-              </td>
-              <td>
                 <Form.Control 
                   size="sm" 
-                  placeholder="Link" 
+                  placeholder="https://..." 
                   value={newAcc.link || ''} 
                   onChange={e => setNewAcc({...newAcc, link: e.target.value})} 
                 />
               </td>
-              <td>
+              <td style={{ verticalAlign: 'top' }}>
                 <Form.Control 
                   size="sm" 
                   type="number" 
-                  placeholder="Total Price" 
+                  placeholder="Total Price €" 
                   value={newAcc.totalPrice || ''} 
                   onChange={e => setNewAcc({...newAcc, totalPrice: Number(e.target.value)})} 
                 />
               </td>
-              <td><Button size="sm" onClick={handleAdd}>Add</Button></td>
+              <td className="text-end" style={{ verticalAlign: 'top' }}>
+                  <Button size="sm" variant="primary" onClick={handleAdd} disabled={!newAcc.link || !newAcc.totalPrice}>
+                    <FaPlus />
+                  </Button>
+              </td>
             </tr>
           </tbody>
         </Table>

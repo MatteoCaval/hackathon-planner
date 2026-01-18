@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { Card, Form } from 'react-bootstrap';
+import { Card, Form, Row, Col } from 'react-bootstrap';
 import { Flight, Accommodation } from '../types';
+import { FaUserFriends, FaPlane, FaBed, FaCalculator } from 'react-icons/fa';
 
 interface Props {
   flights: Flight[];
@@ -22,12 +23,20 @@ const BudgetCalculator: React.FC<Props> = ({ flights, accommodations, totalBudge
   const remaining = totalBudget - totalCost;
 
   return (
-    <Card className="mb-4 shadow-sm border-info">
-      <Card.Header className="bg-info text-white">Budget Calculator</Card.Header>
-      <Card.Body>
-        <div className="row g-3">
-          <div className="col-md-4">
-            <Form.Label>Select Flight Option</Form.Label>
+    <Card className="mb-4 shadow budget-card">
+      <Card.Body className="p-4">
+        <div className="d-flex align-items-center mb-4">
+            <div className="bg-white bg-opacity-25 p-2 rounded-circle me-3">
+                <FaCalculator size={24} className="text-white" />
+            </div>
+            <h4 className="m-0 text-white">Budget Estimator</h4>
+        </div>
+
+        <Row className="g-4 mb-4">
+          <Col md={4}>
+            <Form.Label className="d-flex align-items-center gap-2">
+                <FaPlane /> Flight Option
+            </Form.Label>
             <Form.Select 
               value={selectedFlightId} 
               onChange={e => setSelectedFlightId(e.target.value)}
@@ -39,9 +48,11 @@ const BudgetCalculator: React.FC<Props> = ({ flights, accommodations, totalBudge
                 </option>
               ))}
             </Form.Select>
-          </div>
-          <div className="col-md-4">
-            <Form.Label>Select Accommodation</Form.Label>
+          </Col>
+          <Col md={4}>
+            <Form.Label className="d-flex align-items-center gap-2">
+                <FaBed /> Accommodation
+            </Form.Label>
             <Form.Select 
               value={selectedAccId} 
               onChange={e => setSelectedAccId(e.target.value)}
@@ -53,33 +64,42 @@ const BudgetCalculator: React.FC<Props> = ({ flights, accommodations, totalBudge
                 </option>
               ))}
             </Form.Select>
-          </div>
-          <div className="col-md-4">
-            <Form.Label>Number of People</Form.Label>
+          </Col>
+          <Col md={4}>
+            <Form.Label className="d-flex align-items-center gap-2">
+                <FaUserFriends /> Team Size
+            </Form.Label>
             <Form.Control 
               type="number" 
               min="1"
               value={peopleCount} 
               onChange={e => setPeopleCount(parseInt(e.target.value) || 0)}
             />
-          </div>
-        </div>
+          </Col>
+        </Row>
 
-        <hr />
-
-        <div className="row">
-          <div className="col-md-6">
-            <h5>Estimated Cost</h5>
-            <p className="mb-1">Flights: €{flightCost}</p>
-            <p className="mb-1">Accommodation: €{accCost}</p>
-            <h4 className="mt-2">Total: €{totalCost}</h4>
-          </div>
-          <div className="col-md-6 text-end">
-            <h5>Budget Status</h5>
-            <h3 className={remaining >= 0 ? "text-success" : "text-danger"}>
-              {remaining >= 0 ? `Under Budget: €${remaining}` : `Over Budget: €${Math.abs(remaining)}`}
-            </h3>
-          </div>
+        <div className="bg-white bg-opacity-10 rounded-3 p-3">
+            <Row className="align-items-center">
+            <Col md={6} className="border-end border-white border-opacity-25">
+                <div className="d-flex justify-content-between mb-2">
+                    <span className="opacity-75">Flights ({peopleCount} ppl)</span>
+                    <span className="fw-bold">€{flightCost.toLocaleString()}</span>
+                </div>
+                <div className="d-flex justify-content-between">
+                    <span className="opacity-75">Accommodation</span>
+                    <span className="fw-bold">€{accCost.toLocaleString()}</span>
+                </div>
+            </Col>
+            <Col md={6} className="text-end ps-4">
+                <div className="mb-1 opacity-75 small text-uppercase fw-bold">Remaining Budget</div>
+                <h2 className="mb-0 fw-bold">
+                    €{remaining.toLocaleString()}
+                </h2>
+                {remaining < 0 && (
+                    <div className="badge bg-danger mt-2">Over Budget by €{Math.abs(remaining).toLocaleString()}</div>
+                )}
+            </Col>
+            </Row>
         </div>
       </Card.Body>
     </Card>

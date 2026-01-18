@@ -4,6 +4,7 @@ import Sidebar from './components/Sidebar';
 import DestinationView from './components/DestinationView';
 import { useLocalStorage } from './useLocalStorage';
 import { Destination } from './types';
+import { FaPlane } from 'react-icons/fa';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'leaflet/dist/leaflet.css';
 
@@ -39,9 +40,14 @@ function App() {
 
   return (
     <div className="d-flex flex-column vh-100">
-      <Navbar bg="dark" variant="dark" className="flex-shrink-0">
-        <Container fluid>
-          <Navbar.Brand>✈️ Hackathon Planner</Navbar.Brand>
+      <Navbar className="flex-shrink-0 z-3 border-bottom bg-white">
+        <Container fluid className="px-4">
+          <Navbar.Brand className="text-primary d-flex align-items-center gap-2 fw-bold">
+             <div className="bg-primary text-white rounded p-1 d-flex align-items-center justify-content-center" style={{ width: '32px', height: '32px' }}>
+                <FaPlane size={18} />
+             </div>
+             Hackathon Planner
+          </Navbar.Brand>
         </Container>
       </Navbar>
       
@@ -54,16 +60,19 @@ function App() {
           onRemove={handleRemoveDestination}
         />
         
-        <main className="flex-grow-1 p-4 overflow-auto bg-white">
+        <main className="flex-grow-1 overflow-auto bg-slate-50 position-relative" style={{ backgroundColor: '#f8fafc' }}>
           {activeDestination ? (
             <DestinationView 
               destination={activeDestination} 
               onUpdate={handleUpdateDestination} 
             />
           ) : (
-            <div className="text-center mt-5 text-muted">
-              <h3>Select or add a destination to start planning!</h3>
-              <p>Use the sidebar to manage your trip options.</p>
+            <div className="d-flex flex-column align-items-center justify-content-center h-100 text-muted">
+              <div className="bg-white p-5 rounded-circle shadow-sm mb-4 d-flex align-items-center justify-content-center" style={{ width: '120px', height: '120px' }}>
+                 <FaPlane size={48} className="text-primary opacity-50" />
+              </div>
+              <h3 className="fw-light">Ready for takeoff?</h3>
+              <p>Select or add a destination from the sidebar to start planning.</p>
             </div>
           )}
         </main>

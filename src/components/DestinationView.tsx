@@ -4,7 +4,8 @@ import MapComponent from './MapComponent';
 import FlightManager from './FlightManager';
 import AccommodationManager from './AccommodationManager';
 import BudgetCalculator from './BudgetCalculator';
-import { Form, Row, Col } from 'react-bootstrap';
+import { Form, Row, Col, InputGroup } from 'react-bootstrap';
+import { FaWallet } from 'react-icons/fa';
 
 interface Props {
   destination: Destination;
@@ -26,35 +27,47 @@ const DestinationView: React.FC<Props> = ({ destination, onUpdate }) => {
   };
 
   return (
-    <div>
-      <h2 className="mb-3">{destination.name}</h2>
-      
-      <Row className="mb-4 align-items-center">
-        <Col md={6}>
-            <Form.Group>
-                <Form.Label><strong>Total Project Budget (€)</strong></Form.Label>
+    <div className="container-fluid px-4 py-3">
+      <div className="d-flex justify-content-between align-items-center mb-4">
+        <h2 className="display-6 fw-bold mb-0 text-primary">{destination.name}</h2>
+        
+        <div style={{ width: '300px' }}>
+            <InputGroup>
+                <InputGroup.Text className="bg-white border-end-0 text-primary">
+                    <FaWallet />
+                </InputGroup.Text>
                 <Form.Control 
                     type="number" 
+                    className="border-start-0 fw-bold text-end"
                     value={destination.totalBudget} 
                     onChange={(e) => handleBudgetChange(Number(e.target.value))}
                 />
-            </Form.Group>
+                <InputGroup.Text className="bg-light">TOTAL BUDGET</InputGroup.Text>
+            </InputGroup>
+        </div>
+      </div>
+
+      <Row className="mb-4">
+        <Col xs={12}>
+             <MapComponent 
+                destLat={destination.latitude} 
+                destLng={destination.longitude} 
+                destName={destination.name} 
+            />
         </Col>
       </Row>
 
-      <MapComponent 
-        destLat={destination.latitude} 
-        destLng={destination.longitude} 
-        destName={destination.name} 
-      />
+      <Row className="mb-4">
+        <Col xs={12}>
+            <BudgetCalculator 
+                flights={destination.flights} 
+                accommodations={destination.accommodations} 
+                totalBudget={destination.totalBudget}
+            />
+        </Col>
+      </Row>
 
-      <BudgetCalculator 
-        flights={destination.flights} 
-        accommodations={destination.accommodations} 
-        totalBudget={destination.totalBudget}
-      />
-
-      <Row>
+      <Row className="g-4">
         <Col lg={6}>
           <FlightManager 
             flights={destination.flights} 
