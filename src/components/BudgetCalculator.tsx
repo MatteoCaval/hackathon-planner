@@ -1,26 +1,26 @@
 import React, { useState } from 'react';
 import { Card, Form, Row, Col } from 'react-bootstrap';
-import { Flight, Accommodation } from '../types';
-import { FaUserFriends, FaPlane, FaBed, FaCalculator } from 'react-icons/fa';
+import { Flight, Accommodation, PlannerSettings } from '../types';
+import { FaPlane, FaBed, FaCalculator } from 'react-icons/fa';
 
 interface Props {
   flights: Flight[];
   accommodations: Accommodation[];
-  totalBudget: number;
+  settings: PlannerSettings;
 }
 
-const BudgetCalculator: React.FC<Props> = ({ flights, accommodations, totalBudget }) => {
+const BudgetCalculator: React.FC<Props> = ({ flights, accommodations, settings }) => {
   const [selectedFlightId, setSelectedFlightId] = useState<string>('');
   const [selectedAccId, setSelectedAccId] = useState<string>('');
-  const [peopleCount, setPeopleCount] = useState<number>(1);
-
+  
   const selectedFlight = flights.find(f => f.id === selectedFlightId);
   const selectedAcc = accommodations.find(a => a.id === selectedAccId);
 
+  const peopleCount = settings.peopleCount;
   const flightCost = selectedFlight ? selectedFlight.pricePerPerson * peopleCount : 0;
   const accCost = selectedAcc ? selectedAcc.totalPrice : 0;
   const totalCost = flightCost + accCost;
-  const remaining = totalBudget - totalCost;
+  const remaining = settings.totalBudget - totalCost;
 
   return (
     <Card className="mb-4 shadow budget-card">
@@ -33,7 +33,7 @@ const BudgetCalculator: React.FC<Props> = ({ flights, accommodations, totalBudge
         </div>
 
         <Row className="g-4 mb-4">
-          <Col md={4}>
+          <Col md={6}>
             <Form.Label className="d-flex align-items-center gap-2">
                 <FaPlane /> Flight Option
             </Form.Label>
@@ -49,7 +49,7 @@ const BudgetCalculator: React.FC<Props> = ({ flights, accommodations, totalBudge
               ))}
             </Form.Select>
           </Col>
-          <Col md={4}>
+          <Col md={6}>
             <Form.Label className="d-flex align-items-center gap-2">
                 <FaBed /> Accommodation
             </Form.Label>
@@ -64,17 +64,6 @@ const BudgetCalculator: React.FC<Props> = ({ flights, accommodations, totalBudge
                 </option>
               ))}
             </Form.Select>
-          </Col>
-          <Col md={4}>
-            <Form.Label className="d-flex align-items-center gap-2">
-                <FaUserFriends /> Team Size
-            </Form.Label>
-            <Form.Control 
-              type="number" 
-              min="1"
-              value={peopleCount} 
-              onChange={e => setPeopleCount(parseInt(e.target.value) || 0)}
-            />
           </Col>
         </Row>
 

@@ -23,7 +23,6 @@ const AddDestinationModal: React.FC<Props> = ({ show, onHide, onAdd }) => {
         name: newName,
         latitude: parseFloat(newLat),
         longitude: parseFloat(newLng),
-        totalBudget: 5000,
         flights: [],
         accommodations: []
       };

@@ -1,17 +1,18 @@
 import { useState, useEffect } from 'react';
-import { Container, Navbar, Button } from 'react-bootstrap';
+import { Container, Navbar, Button, Form, InputGroup } from 'react-bootstrap';
 import Sidebar from './components/Sidebar';
 import DestinationView from './components/DestinationView';
 import AddDestinationModal from './components/AddDestinationModal';
 import DataPersistence from './components/DataPersistence';
 import { useLocalStorage } from './useLocalStorage';
-import { Destination } from './types';
-import { FaPlane, FaPlus } from 'react-icons/fa';
+import { Destination, PlannerSettings } from './types';
+import { FaPlane, FaPlus, FaUsers, FaWallet } from 'react-icons/fa';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'leaflet/dist/leaflet.css';
 
 function App() {
   const [destinations, setDestinations] = useLocalStorage<Destination[]>('hackathon-destinations', []);
+  const [settings, setSettings] = useLocalStorage<PlannerSettings>('hackathon-settings', { totalBudget: 5000, peopleCount: 5 });
   const [activeId, setActiveId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
 
@@ -29,7 +30,9 @@ function App() {
   };
 
   const handleAddDestination = (newDest: Destination) => {
-    setDestinations([...destinations, newDest]);
+    // Ensure no legacy budget is attached if type is strict, though local var is fine
+    const { ...dest } = newDest; 
+    setDestinations([...destinations, dest]);
     setActiveId(newDest.id);
   };
 
@@ -45,21 +48,43 @@ function App() {
     setDestinations(data);
     if (data.length > 0) {
         setActiveId(data[0].id);
-    } else {
-        setActiveId(null);
     }
   };
 
   return (
     <div className="d-flex flex-column vh-100">
-      <Navbar className="flex-shrink-0 z-3 border-bottom bg-white">
+      <Navbar className="flex-shrink-0 z-3 border-bottom bg-white py-2">
         <Container fluid className="px-4">
-          <Navbar.Brand className="text-primary d-flex align-items-center gap-2 fw-bold me-auto">
+          <Navbar.Brand className="text-primary d-flex align-items-center gap-2 fw-bold me-4">
              <div className="bg-primary text-white rounded p-1 d-flex align-items-center justify-content-center" style={{ width: '32px', height: '32px' }}>
                 <FaPlane size={18} />
              </div>
-             Hackathon Planner
+             <span className="d-none d-md-inline">Hackathon Planner</span>
           </Navbar.Brand>
+
+          <div className="d-flex align-items-center gap-3 me-auto border-start ps-3">
+            <InputGroup size="sm" style={{ width: '160px' }}>
+                <InputGroup.Text className="bg-light text-muted border-end-0"><FaWallet /></InputGroup.Text>
+                <Form.Control 
+                    type="number" 
+                    className="border-start-0"
+                    placeholder="Budget"
+                    value={settings.totalBudget}
+                    onChange={(e) => setSettings({...settings, totalBudget: Number(e.target.value)})}
+                />
+            </InputGroup>
+            
+            <InputGroup size="sm" style={{ width: '120px' }}>
+                <InputGroup.Text className="bg-light text-muted border-end-0"><FaUsers /></InputGroup.Text>
+                <Form.Control 
+                    type="number" 
+                    className="border-start-0"
+                    placeholder="Ppl"
+                    value={settings.peopleCount}
+                    onChange={(e) => setSettings({...settings, peopleCount: Number(e.target.value)})}
+                />
+            </InputGroup>
+          </div>
           
           <DataPersistence destinations={destinations} onImport={handleImport} />
         </Container>
@@ -78,7 +103,8 @@ function App() {
           {activeDestination ? (
             <DestinationView 
               destination={activeDestination} 
-              onUpdate={handleUpdateDestination} 
+              onUpdate={handleUpdateDestination}
+              settings={settings}
             />
           ) : (
             <div className="d-flex flex-column align-items-center justify-content-center h-100 text-muted">

@@ -20,9 +20,13 @@ export interface Destination {
   name: string;
   latitude: number;
   longitude: number;
-  totalBudget: number;
   flights: Flight[];
   accommodations: Accommodation[];
+}
+
+export interface PlannerSettings {
+  totalBudget: number;
+  peopleCount: number;
 }
 
 export const DUBLIN_COORDS: [number, number] = [53.3498, -6.2603];
