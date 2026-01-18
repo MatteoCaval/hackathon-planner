@@ -21,6 +21,8 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange }) => 
         link: newAcc.link,
         description: newAcc.description || '',
         totalPrice: Number(newAcc.totalPrice),
+        startDate: newAcc.startDate || '',
+        endDate: newAcc.endDate || '',
       };
       onChange([...accommodations, acc]);
       setNewAcc({});
@@ -52,7 +54,7 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange }) => 
         <Table hover responsive className="mb-0 align-middle">
           <thead className="bg-light">
             <tr>
-              <th style={{ width: '50%' }}>Description & Link</th>
+              <th style={{ width: '50%' }}>Description & Dates</th>
               <th style={{ width: '30%' }}>Total Price</th>
               <th style={{ width: '20%' }}></th>
             </tr>
@@ -62,7 +64,14 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange }) => 
               <tr key={a.id}>
                 <td>
                     <div className="fw-bold text-dark">{a.description}</div>
-                    <a href={a.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-flex align-items-center gap-1 mt-1">
+                    <div className="text-muted small my-1">
+                        {a.startDate && a.endDate ? (
+                            <span>{a.startDate} <span className="mx-1">to</span> {a.endDate}</span>
+                        ) : (
+                            <span className="fst-italic text-black-50">No dates set</span>
+                        )}
+                    </div>
+                    <a href={a.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-flex align-items-center gap-1">
                         View Property <FaExternalLinkAlt size={10} />
                     </a>
                 </td>
@@ -99,11 +108,25 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange }) => 
               <td>
                 <Form.Control 
                   size="sm" 
-                  placeholder="Description (e.g. Airbnb near center)" 
+                  placeholder="Description" 
                   value={newAcc.description || ''} 
                   onChange={e => setNewAcc({...newAcc, description: e.target.value})} 
                   className="mb-2"
                 />
+                <div className="d-flex gap-1 mb-2">
+                    <Form.Control 
+                    size="sm" 
+                    type="date"
+                    value={newAcc.startDate || ''} 
+                    onChange={e => setNewAcc({...newAcc, startDate: e.target.value})} 
+                    />
+                    <Form.Control 
+                    size="sm" 
+                    type="date"
+                    value={newAcc.endDate || ''} 
+                    onChange={e => setNewAcc({...newAcc, endDate: e.target.value})} 
+                    />
+                </div>
                 <Form.Control 
                   size="sm" 
                   placeholder="https://..." 
@@ -115,7 +138,7 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange }) => 
                 <Form.Control 
                   size="sm" 
                   type="number" 
-                  placeholder="Total Price €" 
+                  placeholder="Price €" 
                   value={newAcc.totalPrice || ''} 
                   onChange={e => setNewAcc({...newAcc, totalPrice: Number(e.target.value)})} 
                 />

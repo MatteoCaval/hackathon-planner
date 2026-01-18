@@ -11,6 +11,8 @@ export interface Accommodation {
   link: string;
   description: string;
   totalPrice: number;
+  startDate: string;
+  endDate: string;
 }
 
 export interface Destination {
