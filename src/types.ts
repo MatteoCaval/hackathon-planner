@@ -1,6 +1,7 @@
 export interface Flight {
   id: string;
   link: string;
+  description: string;
   startDate: string;
   endDate: string;
   pricePerPerson: number;

@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Table, Button, Form, Card } from 'react-bootstrap';
 import { v4 as uuidv4 } from 'uuid';
 import { Flight } from '../types';
-import { FaTrash, FaExternalLinkAlt, FaPlus, FaPlaneDeparture } from 'react-icons/fa';
+import { FaTrash, FaExternalLinkAlt, FaPlus, FaPlaneDeparture, FaEdit, FaSave } from 'react-icons/fa';
 
 interface Props {
   flights: Flight[];
@@ -11,12 +11,15 @@ interface Props {
 
 const FlightManager: React.FC<Props> = ({ flights, onChange }) => {
   const [newFlight, setNewFlight] = useState<Partial<Flight>>({});
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<Partial<Flight>>({});
 
   const handleAdd = () => {
     if (newFlight.link && newFlight.pricePerPerson) {
       const flight: Flight = {
         id: uuidv4(),
         link: newFlight.link,
+        description: newFlight.description || '',
         startDate: newFlight.startDate || '',
         endDate: newFlight.endDate || '',
         pricePerPerson: Number(newFlight.pricePerPerson),
@@ -30,6 +33,33 @@ const FlightManager: React.FC<Props> = ({ flights, onChange }) => {
     onChange(flights.filter(f => f.id !== id));
   };
 
+  const startEdit = (flight: Flight) => {
+    setEditingId(flight.id);
+    setEditForm(flight);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditForm({});
+  };
+
+  const saveEdit = () => {
+    if (editingId && editForm.link && editForm.pricePerPerson) {
+        const updatedFlights = flights.map(f => {
+            if (f.id === editingId) {
+                return {
+                    ...f,
+                    ...editForm,
+                    pricePerPerson: Number(editForm.pricePerPerson)
+                } as Flight;
+            }
+            return f;
+        });
+        onChange(updatedFlights);
+        cancelEdit();
+    }
+  };
+
   return (
     <Card className="mb-4 h-100">
       <Card.Header className="d-flex align-items-center gap-2 bg-white">
@@ -40,25 +70,92 @@ const FlightManager: React.FC<Props> = ({ flights, onChange }) => {
         <Table hover responsive className="mb-0 align-middle">
           <thead className="bg-light">
             <tr>
-              <th style={{ width: '40%' }}>Dates & Link</th>
-              <th style={{ width: '30%' }}>Price/Person</th>
-              <th style={{ width: '10%' }}></th>
+              <th style={{ width: '50%' }}>Description & Dates</th>
+              <th style={{ width: '25%' }}>Price/Person</th>
+              <th style={{ width: '25%' }}></th>
             </tr>
           </thead>
           <tbody>
             {flights.map(f => (
               <tr key={f.id}>
                 <td>
-                    <div className="fw-bold text-dark">{f.startDate} <span className="text-muted fw-normal mx-1">to</span> {f.endDate}</div>
-                    <a href={f.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-flex align-items-center gap-1 mt-1">
-                        View Deal <FaExternalLinkAlt size={10} />
-                    </a>
+                    {editingId === f.id ? (
+                        <div className="d-flex flex-column gap-2">
+                             <Form.Control 
+                                size="sm" 
+                                placeholder="Description" 
+                                value={editForm.description || ''} 
+                                onChange={e => setEditForm({...editForm, description: e.target.value})} 
+                             />
+                             <div className="d-flex gap-1">
+                                <Form.Control 
+                                    size="sm" 
+                                    type="date"
+                                    value={editForm.startDate || ''} 
+                                    onChange={e => {
+                                        const newStart = e.target.value;
+                                        setEditForm(prev => ({
+                                            ...prev, 
+                                            startDate: newStart,
+                                            endDate: prev.endDate && prev.endDate < newStart ? '' : prev.endDate
+                                        }));
+                                    }} 
+                                />
+                                <Form.Control 
+                                    size="sm" 
+                                    type="date"
+                                    value={editForm.endDate || ''} 
+                                    min={editForm.startDate || ''}
+                                    onChange={e => setEditForm({...editForm, endDate: e.target.value})} 
+                                />
+                             </div>
+                             <Form.Control 
+                                size="sm" 
+                                placeholder="Link" 
+                                value={editForm.link || ''} 
+                                onChange={e => setEditForm({...editForm, link: e.target.value})} 
+                             />
+                        </div>
+                    ) : (
+                        <>
+                            <div className="fw-bold text-dark">{f.description || 'Flight Option'}</div>
+                            <div className="text-muted small my-1">
+                                {f.startDate} <span className="mx-1">to</span> {f.endDate}
+                            </div>
+                            <a href={f.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-flex align-items-center gap-1">
+                                View Deal <FaExternalLinkAlt size={10} />
+                            </a>
+                        </>
+                    )}
                 </td>
-                <td className="fw-bold text-primary">€{f.pricePerPerson}</td>
-                <td className="text-end">
-                    <Button variant="link" className="text-danger p-0" onClick={() => handleRemove(f.id)}>
-                        <FaTrash />
-                    </Button>
+                <td style={{ verticalAlign: editingId === f.id ? 'top' : 'middle' }}>
+                    {editingId === f.id ? (
+                        <Form.Control 
+                            size="sm" 
+                            type="number" 
+                            value={editForm.pricePerPerson} 
+                            onChange={e => setEditForm({...editForm, pricePerPerson: Number(e.target.value)})} 
+                        />
+                    ) : (
+                        <span className="fw-bold text-primary">€{f.pricePerPerson}</span>
+                    )}
+                </td>
+                <td className="text-end" style={{ verticalAlign: editingId === f.id ? 'top' : 'middle' }}>
+                    {editingId === f.id ? (
+                        <div className="d-flex gap-2 justify-content-end">
+                            <Button size="sm" variant="success" onClick={saveEdit}><FaSave /></Button>
+                            <Button size="sm" variant="secondary" onClick={cancelEdit}>Cancel</Button>
+                        </div>
+                    ) : (
+                        <>
+                             <Button variant="link" className="text-secondary p-0 me-3" onClick={() => startEdit(f)}>
+                                <FaEdit />
+                            </Button>
+                            <Button variant="link" className="text-danger p-0" onClick={() => handleRemove(f.id)}>
+                                <FaTrash />
+                            </Button>
+                        </>
+                    )}
                 </td>
               </tr>
             ))}
@@ -67,9 +164,9 @@ const FlightManager: React.FC<Props> = ({ flights, onChange }) => {
                 <div className="d-flex flex-column gap-2">
                     <Form.Control 
                     size="sm" 
-                    placeholder="https://..." 
-                    value={newFlight.link || ''} 
-                    onChange={e => setNewFlight({...newFlight, link: e.target.value})} 
+                    placeholder="Description (e.g. Ryanair Morning)" 
+                    value={newFlight.description || ''} 
+                    onChange={e => setNewFlight({...newFlight, description: e.target.value})} 
                     />
                     <div className="d-flex gap-1">
                         <Form.Control 
@@ -81,7 +178,6 @@ const FlightManager: React.FC<Props> = ({ flights, onChange }) => {
                             setNewFlight(prev => ({
                                 ...prev, 
                                 startDate: newStart,
-                                // Reset end date if it's before the new start date
                                 endDate: prev.endDate && prev.endDate < newStart ? '' : prev.endDate
                             }));
                         }} 
@@ -94,6 +190,12 @@ const FlightManager: React.FC<Props> = ({ flights, onChange }) => {
                         onChange={e => setNewFlight({...newFlight, endDate: e.target.value})} 
                         />
                     </div>
+                    <Form.Control 
+                    size="sm" 
+                    placeholder="Link (https://...)" 
+                    value={newFlight.link || ''} 
+                    onChange={e => setNewFlight({...newFlight, link: e.target.value})} 
+                    />
                 </div>
               </td>
               <td style={{ verticalAlign: 'top' }}>

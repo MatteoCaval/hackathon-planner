@@ -11,8 +11,8 @@ interface Props {
 
 const AccommodationManager: React.FC<Props> = ({ accommodations, onChange }) => {
   const [newAcc, setNewAcc] = useState<Partial<Accommodation>>({});
-  const [editId, setEditId] = useState<string | null>(null);
-  const [editPrice, setEditPrice] = useState<number>(0);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editForm, setEditForm] = useState<Partial<Accommodation>>({});
 
   const handleAdd = () => {
     if (newAcc.link && newAcc.totalPrice) {
@@ -34,14 +34,30 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange }) => 
   };
   
   const startEdit = (acc: Accommodation) => {
-      setEditId(acc.id);
-      setEditPrice(acc.totalPrice);
+      setEditingId(acc.id);
+      setEditForm(acc);
+  };
+
+  const cancelEdit = () => {
+    setEditingId(null);
+    setEditForm({});
   };
   
-  const saveEdit = (id: string) => {
-      const updated = accommodations.map(a => a.id === id ? { ...a, totalPrice: editPrice } : a);
-      onChange(updated);
-      setEditId(null);
+  const saveEdit = () => {
+      if (editingId && editForm.link && editForm.totalPrice) {
+        const updated = accommodations.map(a => {
+            if (a.id === editingId) {
+                return {
+                    ...a,
+                    ...editForm,
+                    totalPrice: Number(editForm.totalPrice)
+                } as Accommodation;
+            }
+            return a;
+        });
+        onChange(updated);
+        cancelEdit();
+      }
   };
 
   return (
@@ -55,43 +71,86 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange }) => 
           <thead className="bg-light">
             <tr>
               <th style={{ width: '50%' }}>Description & Dates</th>
-              <th style={{ width: '30%' }}>Total Price</th>
-              <th style={{ width: '20%' }}></th>
+              <th style={{ width: '25%' }}>Total Price</th>
+              <th style={{ width: '25%' }}></th>
             </tr>
           </thead>
           <tbody>
             {accommodations.map(a => (
               <tr key={a.id}>
                 <td>
-                    <div className="fw-bold text-dark">{a.description}</div>
-                    <div className="text-muted small my-1">
-                        {a.startDate && a.endDate ? (
-                            <span>{a.startDate} <span className="mx-1">to</span> {a.endDate}</span>
-                        ) : (
-                            <span className="fst-italic text-black-50">No dates set</span>
-                        )}
-                    </div>
-                    <a href={a.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-flex align-items-center gap-1">
-                        View Property <FaExternalLinkAlt size={10} />
-                    </a>
-                </td>
-                <td>
-                    {editId === a.id ? (
-                        <div className="d-flex gap-2">
+                    {editingId === a.id ? (
+                        <div className="d-flex flex-column gap-2">
                              <Form.Control 
                                 size="sm" 
-                                type="number" 
-                                value={editPrice} 
-                                onChange={e => setEditPrice(Number(e.target.value))} 
+                                placeholder="Description" 
+                                value={editForm.description || ''} 
+                                onChange={e => setEditForm({...editForm, description: e.target.value})} 
                              />
-                             <Button size="sm" variant="success" onClick={() => saveEdit(a.id)}><FaSave /></Button>
+                             <div className="d-flex gap-1">
+                                <Form.Control 
+                                    size="sm" 
+                                    type="date"
+                                    value={editForm.startDate || ''} 
+                                    onChange={e => {
+                                        const newStart = e.target.value;
+                                        setEditForm(prev => ({
+                                            ...prev, 
+                                            startDate: newStart,
+                                            endDate: prev.endDate && prev.endDate < newStart ? '' : prev.endDate
+                                        }));
+                                    }} 
+                                />
+                                <Form.Control 
+                                    size="sm" 
+                                    type="date"
+                                    value={editForm.endDate || ''} 
+                                    min={editForm.startDate || ''}
+                                    onChange={e => setEditForm({...editForm, endDate: e.target.value})} 
+                                />
+                             </div>
+                             <Form.Control 
+                                size="sm" 
+                                placeholder="Link" 
+                                value={editForm.link || ''} 
+                                onChange={e => setEditForm({...editForm, link: e.target.value})} 
+                             />
                         </div>
+                    ) : (
+                        <>
+                            <div className="fw-bold text-dark">{a.description}</div>
+                            <div className="text-muted small my-1">
+                                {a.startDate && a.endDate ? (
+                                    <span>{a.startDate} <span className="mx-1">to</span> {a.endDate}</span>
+                                ) : (
+                                    <span className="fst-italic text-black-50">No dates set</span>
+                                )}
+                            </div>
+                            <a href={a.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-flex align-items-center gap-1">
+                                View Property <FaExternalLinkAlt size={10} />
+                            </a>
+                        </>
+                    )}
+                </td>
+                <td style={{ verticalAlign: editingId === a.id ? 'top' : 'middle' }}>
+                    {editingId === a.id ? (
+                        <Form.Control 
+                            size="sm" 
+                            type="number" 
+                            value={editForm.totalPrice} 
+                            onChange={e => setEditForm({...editForm, totalPrice: Number(e.target.value)})} 
+                        />
                     ) : (
                         <span className="fw-bold text-primary">€{a.totalPrice}</span>
                     )}
                 </td>
-                <td className="text-end">
-                    {editId !== a.id && (
+                <td className="text-end" style={{ verticalAlign: editingId === a.id ? 'top' : 'middle' }}>
+                    {editingId === a.id ? (
+                        <div className="d-flex gap-2 justify-content-end">
+                             <Button size="sm" variant="success" onClick={saveEdit}><FaSave /></Button>
+                             <Button size="sm" variant="secondary" onClick={cancelEdit}>Cancel</Button>
+                        </div>
+                    ) : (
                         <>
                             <Button variant="link" className="text-secondary p-0 me-3" onClick={() => startEdit(a)}>
                                 <FaEdit />
