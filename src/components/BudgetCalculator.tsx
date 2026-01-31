@@ -10,17 +10,40 @@ interface Props {
 }
 
 const BudgetCalculator: React.FC<Props> = ({ flights, accommodations, settings }) => {
-  const [selectedFlightId, setSelectedFlightId] = useState<string>('');
+  const [flightAssignments, setFlightAssignments] = useState<Record<string, number>>({});
   const [selectedAccId, setSelectedAccId] = useState<string>('');
   
-  const selectedFlight = flights.find(f => f.id === selectedFlightId);
   const selectedAcc = accommodations.find(a => a.id === selectedAccId);
 
   const peopleCount = settings.peopleCount;
-  const flightCost = selectedFlight ? selectedFlight.pricePerPerson * peopleCount : 0;
+  
+  // Calculate total flight cost based on assignments
+  const totalFlightCost = Object.entries(flightAssignments).reduce((total, [flightId, count]) => {
+    const flight = flights.find(f => f.id === flightId);
+    return total + (flight ? flight.pricePerPerson * count : 0);
+  }, 0);
+
+  const assignedPeopleCount = Object.entries(flightAssignments).reduce((total, [flightId, count]) => {
+    // Only count assignments for flights that still exist
+    return flights.some(f => f.id === flightId) ? total + count : total;
+  }, 0);
+
   const accCost = selectedAcc ? selectedAcc.totalPrice : 0;
-  const totalCost = flightCost + accCost;
+  const totalCost = totalFlightCost + accCost;
   const remaining = settings.totalBudget - totalCost;
+
+  const handleAssignmentChange = (flightId: string, count: number) => {
+    if (count < 0) return;
+    setFlightAssignments(prev => {
+        const newAssignments = { ...prev };
+        if (count === 0) {
+            delete newAssignments[flightId];
+        } else {
+            newAssignments[flightId] = count;
+        }
+        return newAssignments;
+    });
+  };
 
   return (
     <Card className="mb-4 shadow budget-card">
@@ -33,23 +56,43 @@ const BudgetCalculator: React.FC<Props> = ({ flights, accommodations, settings }
         </div>
 
         <Row className="g-4 mb-4">
-          <Col md={6}>
-            <Form.Label className="d-flex align-items-center gap-2">
-                <FaPlane /> Flight Option
+          <Col md={12}>
+            <Form.Label className="d-flex align-items-center gap-2 mb-3">
+                <FaPlane /> Flight Allocations 
+                <span className={assignedPeopleCount > peopleCount ? "text-danger ms-2" : "text-white-50 ms-2"}>
+                    (Assigned: {assignedPeopleCount} / {peopleCount} people)
+                </span>
             </Form.Label>
-            <Form.Select 
-              value={selectedFlightId} 
-              onChange={e => setSelectedFlightId(e.target.value)}
-            >
-              <option value="">-- Select Flight --</option>
-              {flights.map(f => (
-                <option key={f.id} value={f.id}>
-                  €{f.pricePerPerson}/p - {f.startDate}
-                </option>
-              ))}
-            </Form.Select>
+            <div className="bg-white bg-opacity-10 rounded p-3">
+                {flights.length === 0 ? (
+                    <div className="text-white-50 fst-italic">No flights available. Add some in the Flight Manager.</div>
+                ) : (
+                    flights.map(f => (
+                        <div key={f.id} className="d-flex align-items-center justify-content-between mb-2 last-mb-0">
+                            <div className="text-truncate me-2" title={f.description}>
+                                <span className="fw-bold">€{f.pricePerPerson}</span>
+                                <span className="mx-2">-</span>
+                                <span>{f.description || 'Unnamed Flight'}</span>
+                                <div className="small opacity-75">{f.startDate}</div>
+                            </div>
+                            <div style={{ width: '100px' }}>
+                                <Form.Control
+                                    type="number"
+                                    size="sm"
+                                    min="0"
+                                    max={peopleCount}
+                                    placeholder="0"
+                                    value={flightAssignments[f.id] || ''}
+                                    onChange={e => handleAssignmentChange(f.id, parseInt(e.target.value) || 0)}
+                                    isInvalid={assignedPeopleCount > peopleCount}
+                                />
+                            </div>
+                        </div>
+                    ))
+                )}
+            </div>
           </Col>
-          <Col md={6}>
+          <Col md={12}>
             <Form.Label className="d-flex align-items-center gap-2">
                 <FaBed /> Accommodation
             </Form.Label>
@@ -71,8 +114,8 @@ const BudgetCalculator: React.FC<Props> = ({ flights, accommodations, settings }
             <Row className="align-items-center">
             <Col md={6} className="border-end border-white border-opacity-25">
                 <div className="d-flex justify-content-between mb-2">
-                    <span className="opacity-75">Flights ({peopleCount} ppl)</span>
-                    <span className="fw-bold">€{flightCost.toLocaleString()}</span>
+                    <span className="opacity-75">Flights Total</span>
+                    <span className="fw-bold">€{totalFlightCost.toLocaleString()}</span>
                 </div>
                 <div className="d-flex justify-content-between">
                     <span className="opacity-75">Accommodation</span>

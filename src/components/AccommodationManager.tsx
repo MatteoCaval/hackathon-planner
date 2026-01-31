@@ -14,6 +14,39 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange }) => 
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Accommodation>>({});
 
+  const newAccEndDateRef = React.useRef<HTMLInputElement>(null);
+  const editAccEndDateRef = React.useRef<HTMLInputElement>(null);
+
+  const currentYear = new Date().getFullYear();
+  const minDate = `${currentYear}-04-01`;
+
+  const handleStartDateChange = (
+      e: React.ChangeEvent<HTMLInputElement>, 
+      isEdit: boolean,
+      updateState: React.Dispatch<React.SetStateAction<Partial<Accommodation>>>
+  ) => {
+    const newStart = e.target.value;
+    updateState(prev => ({
+        ...prev, 
+        startDate: newStart,
+        endDate: prev.endDate && prev.endDate < newStart ? '' : prev.endDate
+    }));
+
+    if (newStart) {
+         setTimeout(() => {
+            const ref = isEdit ? editAccEndDateRef : newAccEndDateRef;
+            if (ref.current) {
+                ref.current.focus();
+                try {
+                    (ref.current as any).showPicker();
+                } catch (err) {
+                    // Ignore
+                }
+            }
+         }, 50);
+    }
+  };
+
   const handleAdd = () => {
     if (newAcc.link && newAcc.totalPrice) {
       const acc: Accommodation = {
@@ -91,23 +124,20 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange }) => 
                                 <Form.Control 
                                     size="sm" 
                                     type="date"
+                                    min={minDate}
                                     value={editForm.startDate || ''} 
-                                    onChange={e => {
-                                        const newStart = e.target.value;
-                                        setEditForm(prev => ({
-                                            ...prev, 
-                                            startDate: newStart,
-                                            endDate: prev.endDate && prev.endDate < newStart ? '' : prev.endDate
-                                        }));
-                                    }} 
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleStartDateChange(e, true, setEditForm)} 
                                 />
-                                <Form.Control 
-                                    size="sm" 
-                                    type="date"
-                                    value={editForm.endDate || ''} 
-                                    min={editForm.startDate || ''}
-                                    onChange={e => setEditForm({...editForm, endDate: e.target.value})} 
-                                />
+                                {editForm.startDate && (
+                                    <Form.Control 
+                                        ref={editAccEndDateRef}
+                                        size="sm" 
+                                        type="date"
+                                        value={editForm.endDate || ''} 
+                                        min={editForm.startDate || ''}
+                                        onChange={e => setEditForm({...editForm, endDate: e.target.value})} 
+                                    />
+                                )}
                              </div>
                              <Form.Control 
                                 size="sm" 
@@ -176,24 +206,20 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange }) => 
                     <Form.Control 
                     size="sm" 
                     type="date"
+                    min={minDate}
                     value={newAcc.startDate || ''} 
-                    onChange={e => {
-                        const newStart = e.target.value;
-                        setNewAcc(prev => ({
-                            ...prev, 
-                            startDate: newStart,
-                            // Reset end date if it's before the new start date
-                            endDate: prev.endDate && prev.endDate < newStart ? '' : prev.endDate
-                        }));
-                    }} 
+                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleStartDateChange(e, false, setNewAcc)}
                     />
-                    <Form.Control 
-                    size="sm" 
-                    type="date"
-                    value={newAcc.endDate || ''} 
-                    min={newAcc.startDate || ''}
-                    onChange={e => setNewAcc({...newAcc, endDate: e.target.value})} 
-                    />
+                    {newAcc.startDate && (
+                        <Form.Control 
+                        ref={newAccEndDateRef}
+                        size="sm" 
+                        type="date"
+                        value={newAcc.endDate || ''} 
+                        min={newAcc.startDate || ''}
+                        onChange={e => setNewAcc({...newAcc, endDate: e.target.value})} 
+                        />
+                    )}
                 </div>
                 <Form.Control 
                   size="sm" 

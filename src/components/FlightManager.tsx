@@ -14,6 +14,41 @@ const FlightManager: React.FC<Props> = ({ flights, onChange }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Flight>>({});
 
+  const newFlightEndDateRef = React.useRef<HTMLInputElement>(null);
+  const editFlightEndDateRef = React.useRef<HTMLInputElement>(null);
+
+  const currentYear = new Date().getFullYear();
+  const minDate = `${currentYear}-04-01`;
+
+  const handleStartDateChange = (
+      e: React.ChangeEvent<HTMLInputElement>, 
+      isEdit: boolean,
+      updateState: React.Dispatch<React.SetStateAction<Partial<Flight>>>
+  ) => {
+    const newStart = e.target.value;
+    updateState(prev => ({
+        ...prev, 
+        startDate: newStart,
+        endDate: prev.endDate && prev.endDate < newStart ? '' : prev.endDate
+    }));
+
+    if (newStart) {
+        // Small timeout to allow state update and render
+        setTimeout(() => {
+            const ref = isEdit ? editFlightEndDateRef : newFlightEndDateRef;
+            if (ref.current) {
+                ref.current.focus();
+                try {
+                    // Try to show picker if supported (newer browsers)
+                    (ref.current as any).showPicker();
+                } catch (err) {
+                    // Ignore error if not supported
+                }
+            }
+        }, 50);
+    }
+  };
+
   const handleAdd = () => {
     if (newFlight.link && newFlight.pricePerPerson) {
       const flight: Flight = {
@@ -91,23 +126,20 @@ const FlightManager: React.FC<Props> = ({ flights, onChange }) => {
                                 <Form.Control 
                                     size="sm" 
                                     type="date"
+                                    min={minDate}
                                     value={editForm.startDate || ''} 
-                                    onChange={e => {
-                                        const newStart = e.target.value;
-                                        setEditForm(prev => ({
-                                            ...prev, 
-                                            startDate: newStart,
-                                            endDate: prev.endDate && prev.endDate < newStart ? '' : prev.endDate
-                                        }));
-                                    }} 
+                                    onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleStartDateChange(e, true, setEditForm)} 
                                 />
-                                <Form.Control 
-                                    size="sm" 
-                                    type="date"
-                                    value={editForm.endDate || ''} 
-                                    min={editForm.startDate || ''}
-                                    onChange={e => setEditForm({...editForm, endDate: e.target.value})} 
-                                />
+                                {editForm.startDate && (
+                                    <Form.Control 
+                                        ref={editFlightEndDateRef}
+                                        size="sm" 
+                                        type="date"
+                                        value={editForm.endDate || ''} 
+                                        min={editForm.startDate || ''}
+                                        onChange={e => setEditForm({...editForm, endDate: e.target.value})} 
+                                    />
+                                )}
                              </div>
                              <Form.Control 
                                 size="sm" 
@@ -172,23 +204,20 @@ const FlightManager: React.FC<Props> = ({ flights, onChange }) => {
                         <Form.Control 
                         size="sm" 
                         type="date"
+                        min={minDate}
                         value={newFlight.startDate || ''} 
-                        onChange={e => {
-                            const newStart = e.target.value;
-                            setNewFlight(prev => ({
-                                ...prev, 
-                                startDate: newStart,
-                                endDate: prev.endDate && prev.endDate < newStart ? '' : prev.endDate
-                            }));
-                        }} 
+                        onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleStartDateChange(e, false, setNewFlight)}
                         />
-                        <Form.Control 
-                        size="sm" 
-                        type="date"
-                        value={newFlight.endDate || ''} 
-                        min={newFlight.startDate || ''}
-                        onChange={e => setNewFlight({...newFlight, endDate: e.target.value})} 
-                        />
+                        {newFlight.startDate && (
+                            <Form.Control 
+                            ref={newFlightEndDateRef}
+                            size="sm" 
+                            type="date"
+                            value={newFlight.endDate || ''} 
+                            min={newFlight.startDate || ''}
+                            onChange={e => setNewFlight({...newFlight, endDate: e.target.value})} 
+                            />
+                        )}
                     </div>
                     <Form.Control 
                     size="sm" 
