@@ -167,6 +167,8 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange }) => 
                         <Form.Control 
                             size="sm" 
                             type="number" 
+                            step="10"
+                            min="0"
                             value={editForm.totalPrice} 
                             onChange={e => setEditForm({...editForm, totalPrice: Number(e.target.value)})} 
                         />
@@ -232,6 +234,8 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange }) => 
                 <Form.Control 
                   size="sm" 
                   type="number" 
+                  step="10"
+                  min="0"
                   placeholder="Price €" 
                   value={newAcc.totalPrice || ''} 
                   onChange={e => setNewAcc({...newAcc, totalPrice: Number(e.target.value)})} 

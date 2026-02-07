@@ -165,6 +165,8 @@ const FlightManager: React.FC<Props> = ({ flights, onChange }) => {
                         <Form.Control 
                             size="sm" 
                             type="number" 
+                            step="10"
+                            min="0"
                             value={editForm.pricePerPerson} 
                             onChange={e => setEditForm({...editForm, pricePerPerson: Number(e.target.value)})} 
                         />
@@ -231,6 +233,8 @@ const FlightManager: React.FC<Props> = ({ flights, onChange }) => {
                 <Form.Control 
                   size="sm" 
                   type="number" 
+                  step="10"
+                  min="0"
                   placeholder="Price €" 
                   value={newFlight.pricePerPerson || ''} 
                   onChange={e => setNewFlight({...newFlight, pricePerPerson: Number(e.target.value)})} 

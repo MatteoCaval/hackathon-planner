@@ -5,10 +5,103 @@ import DestinationView from './components/DestinationView';
 import AddDestinationModal from './components/AddDestinationModal';
 import DataPersistence from './components/DataPersistence';
 import { useLocalStorage } from './useLocalStorage';
-import { Destination, PlannerSettings } from './types';
+import { BudgetEstimatorState, Destination, ExtraCost, PlannerSettings } from './types';
 import { FaPlane, FaPlus, FaUsers, FaWallet } from 'react-icons/fa';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'leaflet/dist/leaflet.css';
+
+type LegacyExtraCost = { description?: unknown; value?: unknown };
+type LegacyBudgetEstimator = { flightAssignments?: unknown; selectedAccommodationId?: unknown };
+type LegacyDestination = Omit<Destination, 'notes' | 'extraCosts' | 'budgetEstimator'> & { notes?: unknown; extraCosts?: unknown; budgetEstimator?: unknown };
+
+const normalizeExtraCosts = (extraCosts: unknown): ExtraCost[] => {
+  if (typeof extraCosts === 'number') {
+    return Number.isFinite(extraCosts) && extraCosts > 0
+      ? [{ description: 'General extra cost', value: extraCosts }]
+      : [];
+  }
+
+  if (!Array.isArray(extraCosts)) {
+    return [];
+  }
+
+  return extraCosts
+    .map((extraCost) => {
+      const typedExtraCost = extraCost as LegacyExtraCost;
+      const description = typeof typedExtraCost.description === 'string' ? typedExtraCost.description : '';
+      const parsedValue = typedExtraCost.value;
+      const value = typeof parsedValue === 'number' && Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : 0;
+
+      return { description, value };
+    })
+    .filter((extraCost) => extraCost.description.trim() || extraCost.value > 0);
+};
+
+const hasInvalidExtraCosts = (extraCosts: unknown): boolean => {
+  if (!Array.isArray(extraCosts)) {
+    return true;
+  }
+
+  return extraCosts.some((extraCost) => {
+    const typedExtraCost = extraCost as LegacyExtraCost;
+    return (
+      typeof typedExtraCost.description !== 'string' ||
+      typeof typedExtraCost.value !== 'number' ||
+      !Number.isFinite(typedExtraCost.value) ||
+      typedExtraCost.value < 0
+    );
+  });
+};
+
+const normalizeFlightAssignments = (flightAssignments: unknown): Record<string, number> => {
+  if (!flightAssignments || typeof flightAssignments !== 'object' || Array.isArray(flightAssignments)) {
+    return {};
+  }
+
+  return Object.entries(flightAssignments as Record<string, unknown>).reduce<Record<string, number>>((acc, [flightId, count]) => {
+    if (typeof count === 'number' && Number.isFinite(count) && count >= 0) {
+      acc[flightId] = Math.floor(count);
+    }
+    return acc;
+  }, {});
+};
+
+const hasInvalidFlightAssignments = (flightAssignments: unknown): boolean => {
+  if (!flightAssignments || typeof flightAssignments !== 'object' || Array.isArray(flightAssignments)) {
+    return true;
+  }
+
+  return Object.values(flightAssignments as Record<string, unknown>).some((count) => {
+    return typeof count !== 'number' || !Number.isFinite(count) || count < 0;
+  });
+};
+
+const normalizeBudgetEstimator = (budgetEstimator: unknown): BudgetEstimatorState => {
+  const typedBudgetEstimator = budgetEstimator as LegacyBudgetEstimator | undefined;
+  return {
+    flightAssignments: normalizeFlightAssignments(typedBudgetEstimator?.flightAssignments),
+    selectedAccommodationId: typeof typedBudgetEstimator?.selectedAccommodationId === 'string' ? typedBudgetEstimator.selectedAccommodationId : ''
+  };
+};
+
+const hasInvalidBudgetEstimator = (budgetEstimator: unknown): boolean => {
+  if (!budgetEstimator || typeof budgetEstimator !== 'object' || Array.isArray(budgetEstimator)) {
+    return true;
+  }
+
+  const typedBudgetEstimator = budgetEstimator as LegacyBudgetEstimator;
+  return (
+    typeof typedBudgetEstimator.selectedAccommodationId !== 'string' ||
+    hasInvalidFlightAssignments(typedBudgetEstimator.flightAssignments)
+  );
+};
+
+const normalizeDestination = (destination: LegacyDestination): Destination => ({
+  ...destination,
+  notes: typeof destination.notes === 'string' ? destination.notes : '',
+  extraCosts: normalizeExtraCosts(destination.extraCosts),
+  budgetEstimator: normalizeBudgetEstimator(destination.budgetEstimator)
+});
 
 function App() {
   const [destinations, setDestinations] = useLocalStorage<Destination[]>('hackathon-destinations', []);
@@ -23,6 +116,21 @@ function App() {
     }
   }, [destinations, activeId]);
 
+  // Backfill fields for data created before new destination fields were added.
+  useEffect(() => {
+    const hasMissingFields = destinations.some((destination) => {
+      const legacyDestination = destination as LegacyDestination;
+      return (
+        typeof legacyDestination.notes !== 'string' ||
+        hasInvalidExtraCosts(legacyDestination.extraCosts) ||
+        hasInvalidBudgetEstimator(legacyDestination.budgetEstimator)
+      );
+    });
+    if (hasMissingFields) {
+      setDestinations(destinations.map((destination) => normalizeDestination(destination as LegacyDestination)));
+    }
+  }, [destinations]);
+
   const activeDestination = destinations.find(d => d.id === activeId);
 
   const handleUpdateDestination = (updatedDest: Destination) => {
@@ -31,7 +139,7 @@ function App() {
 
   const handleAddDestination = (newDest: Destination) => {
     // Ensure no legacy budget is attached if type is strict, though local var is fine
-    const { ...dest } = newDest; 
+    const { ...dest } = normalizeDestination(newDest); 
     setDestinations([...destinations, dest]);
     setActiveId(newDest.id);
   };
@@ -45,9 +153,10 @@ function App() {
   };
 
   const handleImport = (data: Destination[]) => {
-    setDestinations(data);
-    if (data.length > 0) {
-        setActiveId(data[0].id);
+    const normalizedData = data.map((destination) => normalizeDestination(destination as LegacyDestination));
+    setDestinations(normalizedData);
+    if (normalizedData.length > 0) {
+        setActiveId(normalizedData[0].id);
     }
   };
 
@@ -67,6 +176,7 @@ function App() {
                 <InputGroup.Text className="bg-light text-muted border-end-0"><FaWallet /></InputGroup.Text>
                 <Form.Control 
                     type="number" 
+                    step="10"
                     className="border-start-0"
                     placeholder="Budget"
                     value={settings.totalBudget}

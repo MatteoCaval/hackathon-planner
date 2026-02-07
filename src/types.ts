@@ -16,11 +16,24 @@ export interface Accommodation {
   endDate: string;
 }
 
+export interface ExtraCost {
+  description: string;
+  value: number;
+}
+
+export interface BudgetEstimatorState {
+  flightAssignments: Record<string, number>;
+  selectedAccommodationId: string;
+}
+
 export interface Destination {
   id: string;
   name: string;
   latitude: number;
   longitude: number;
+  notes: string;
+  extraCosts: ExtraCost[];
+  budgetEstimator: BudgetEstimatorState;
   flights: Flight[];
   accommodations: Accommodation[];
 }
