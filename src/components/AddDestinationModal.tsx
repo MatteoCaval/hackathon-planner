@@ -29,6 +29,8 @@ const AddDestinationModal: React.FC<Props> = ({ show, onHide, onAdd }) => {
           flightAssignments: {},
           selectedAccommodationId: ''
         },
+        flightDraft: {},
+        accommodationDraft: {},
         flights: [],
         accommodations: []
       };

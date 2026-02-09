@@ -76,6 +76,20 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate }) =
     });
   };
 
+  const handleFlightDraftChange = (flightDraft: Partial<Flight>) => {
+    onUpdate({
+      ...destination,
+      flightDraft
+    });
+  };
+
+  const handleAccommodationDraftChange = (accommodationDraft: Partial<Accommodation>) => {
+    onUpdate({
+      ...destination,
+      accommodationDraft
+    });
+  };
+
   return (
     <div className="container-fluid px-4 py-3">
       <div className="d-flex justify-content-between align-items-center mb-4">
@@ -130,12 +144,16 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate }) =
           <FlightManager 
             flights={destination.flights} 
             onChange={handleFlightsChange} 
+            draft={destination.flightDraft}
+            onDraftChange={handleFlightDraftChange}
           />
         </Col>
         <Col lg={6}>
           <AccommodationManager 
             accommodations={destination.accommodations} 
             onChange={handleAccChange} 
+            draft={destination.accommodationDraft}
+            onDraftChange={handleAccommodationDraftChange}
           />
         </Col>
       </Row>

@@ -5,14 +5,20 @@ import DestinationView from './components/DestinationView';
 import AddDestinationModal from './components/AddDestinationModal';
 import DataPersistence from './components/DataPersistence';
 import { useLocalStorage } from './useLocalStorage';
-import { BudgetEstimatorState, Destination, ExtraCost, PlannerSettings } from './types';
+import { Accommodation, BudgetEstimatorState, Destination, ExtraCost, Flight, PlannerSettings } from './types';
 import { FaPlane, FaPlus, FaUsers, FaWallet } from 'react-icons/fa';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'leaflet/dist/leaflet.css';
 
 type LegacyExtraCost = { description?: unknown; value?: unknown };
 type LegacyBudgetEstimator = { flightAssignments?: unknown; selectedAccommodationId?: unknown };
-type LegacyDestination = Omit<Destination, 'notes' | 'extraCosts' | 'budgetEstimator'> & { notes?: unknown; extraCosts?: unknown; budgetEstimator?: unknown };
+type LegacyDestination = Omit<Destination, 'notes' | 'extraCosts' | 'budgetEstimator' | 'flightDraft' | 'accommodationDraft'> & {
+  notes?: unknown;
+  extraCosts?: unknown;
+  budgetEstimator?: unknown;
+  flightDraft?: unknown;
+  accommodationDraft?: unknown;
+};
 
 const normalizeExtraCosts = (extraCosts: unknown): ExtraCost[] => {
   if (typeof extraCosts === 'number') {
@@ -96,11 +102,85 @@ const hasInvalidBudgetEstimator = (budgetEstimator: unknown): boolean => {
   );
 };
 
+const normalizeFlightDraft = (flightDraft: unknown): Partial<Flight> => {
+  if (!flightDraft || typeof flightDraft !== 'object' || Array.isArray(flightDraft)) {
+    return {};
+  }
+
+  const typedDraft = flightDraft as Record<string, unknown>;
+  const normalizedDraft: Partial<Flight> = {};
+
+  if (typeof typedDraft.link === 'string') normalizedDraft.link = typedDraft.link;
+  if (typeof typedDraft.description === 'string') normalizedDraft.description = typedDraft.description;
+  if (typeof typedDraft.startDate === 'string') normalizedDraft.startDate = typedDraft.startDate;
+  if (typeof typedDraft.endDate === 'string') normalizedDraft.endDate = typedDraft.endDate;
+  if (typeof typedDraft.pricePerPerson === 'number' && Number.isFinite(typedDraft.pricePerPerson) && typedDraft.pricePerPerson >= 0) {
+    normalizedDraft.pricePerPerson = typedDraft.pricePerPerson;
+  }
+
+  return normalizedDraft;
+};
+
+const normalizeAccommodationDraft = (accommodationDraft: unknown): Partial<Accommodation> => {
+  if (!accommodationDraft || typeof accommodationDraft !== 'object' || Array.isArray(accommodationDraft)) {
+    return {};
+  }
+
+  const typedDraft = accommodationDraft as Record<string, unknown>;
+  const normalizedDraft: Partial<Accommodation> = {};
+
+  if (typeof typedDraft.link === 'string') normalizedDraft.link = typedDraft.link;
+  if (typeof typedDraft.description === 'string') normalizedDraft.description = typedDraft.description;
+  if (typeof typedDraft.startDate === 'string') normalizedDraft.startDate = typedDraft.startDate;
+  if (typeof typedDraft.endDate === 'string') normalizedDraft.endDate = typedDraft.endDate;
+  if (typeof typedDraft.totalPrice === 'number' && Number.isFinite(typedDraft.totalPrice) && typedDraft.totalPrice >= 0) {
+    normalizedDraft.totalPrice = typedDraft.totalPrice;
+  }
+
+  return normalizedDraft;
+};
+
+const hasInvalidFlightDraft = (flightDraft: unknown): boolean => {
+  if (!flightDraft || typeof flightDraft !== 'object' || Array.isArray(flightDraft)) {
+    return true;
+  }
+
+  const typedDraft = flightDraft as Record<string, unknown>;
+  return Object.entries(typedDraft).some(([key, value]) => {
+    if (key === 'pricePerPerson') {
+      return typeof value !== 'number' || !Number.isFinite(value) || value < 0;
+    }
+    if (key === 'link' || key === 'description' || key === 'startDate' || key === 'endDate') {
+      return typeof value !== 'string';
+    }
+    return true;
+  });
+};
+
+const hasInvalidAccommodationDraft = (accommodationDraft: unknown): boolean => {
+  if (!accommodationDraft || typeof accommodationDraft !== 'object' || Array.isArray(accommodationDraft)) {
+    return true;
+  }
+
+  const typedDraft = accommodationDraft as Record<string, unknown>;
+  return Object.entries(typedDraft).some(([key, value]) => {
+    if (key === 'totalPrice') {
+      return typeof value !== 'number' || !Number.isFinite(value) || value < 0;
+    }
+    if (key === 'link' || key === 'description' || key === 'startDate' || key === 'endDate') {
+      return typeof value !== 'string';
+    }
+    return true;
+  });
+};
+
 const normalizeDestination = (destination: LegacyDestination): Destination => ({
   ...destination,
   notes: typeof destination.notes === 'string' ? destination.notes : '',
   extraCosts: normalizeExtraCosts(destination.extraCosts),
-  budgetEstimator: normalizeBudgetEstimator(destination.budgetEstimator)
+  budgetEstimator: normalizeBudgetEstimator(destination.budgetEstimator),
+  flightDraft: normalizeFlightDraft(destination.flightDraft),
+  accommodationDraft: normalizeAccommodationDraft(destination.accommodationDraft)
 });
 
 function App() {
@@ -123,7 +203,9 @@ function App() {
       return (
         typeof legacyDestination.notes !== 'string' ||
         hasInvalidExtraCosts(legacyDestination.extraCosts) ||
-        hasInvalidBudgetEstimator(legacyDestination.budgetEstimator)
+        hasInvalidBudgetEstimator(legacyDestination.budgetEstimator) ||
+        hasInvalidFlightDraft(legacyDestination.flightDraft) ||
+        hasInvalidAccommodationDraft(legacyDestination.accommodationDraft)
       );
     });
     if (hasMissingFields) {

@@ -34,6 +34,8 @@ export interface Destination {
   notes: string;
   extraCosts: ExtraCost[];
   budgetEstimator: BudgetEstimatorState;
+  flightDraft: Partial<Flight>;
+  accommodationDraft: Partial<Accommodation>;
   flights: Flight[];
   accommodations: Accommodation[];
 }
