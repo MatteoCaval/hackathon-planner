@@ -1,7 +1,7 @@
-import React from 'react';
-import { Nav, Button } from 'react-bootstrap';
+import React, { useMemo, useState } from 'react';
+import { Nav, Button, Form } from 'react-bootstrap';
 import { Destination } from '../types';
-import { FaMapMarkerAlt, FaPlus, FaTrash } from 'react-icons/fa';
+import { FaMapMarkerAlt, FaPlus, FaTrash, FaSearch } from 'react-icons/fa';
 
 interface Props {
   destinations: Destination[];
@@ -12,18 +12,44 @@ interface Props {
 }
 
 const Sidebar: React.FC<Props> = ({ destinations, activeId, onSelect, onAddClick, onRemove }) => {
+  const [searchQuery, setSearchQuery] = useState('');
+
+  const filteredDestinations = useMemo(() => {
+    const query = searchQuery.trim().toLowerCase();
+    if (!query) {
+      return destinations;
+    }
+
+    return destinations.filter((destination) => destination.name.toLowerCase().includes(query));
+  }, [destinations, searchQuery]);
+
   return (
     <aside className="sidebar-container h-100 d-flex flex-column" aria-label="Destinations sidebar">
-      <div className="sidebar-header d-flex align-items-center justify-content-between">
-        <span className="sidebar-label">Destinations</span>
-        <span className="sidebar-count" aria-label={`${destinations.length} destinations`}>
-          {destinations.length}
-        </span>
+      <div className="sidebar-header">
+        <div className="d-flex align-items-center justify-content-between mb-3">
+          <span className="sidebar-label">Destinations</span>
+          <span className="sidebar-count" aria-label={`${destinations.length} destinations`}>
+            {destinations.length}
+          </span>
+        </div>
+
+        <Form.Group controlId="destination-search">
+          <div className="sidebar-search">
+            <FaSearch aria-hidden="true" />
+            <Form.Control
+              size="sm"
+              value={searchQuery}
+              onChange={(event) => setSearchQuery(event.target.value)}
+              placeholder="Search destinations"
+              aria-label="Search destinations"
+            />
+          </div>
+        </Form.Group>
       </div>
 
       <div className="flex-grow-1 overflow-auto sidebar-list">
         <Nav as="ul" className="flex-column gap-1">
-          {destinations.map((destination) => (
+          {filteredDestinations.map((destination) => (
             <Nav.Item as="li" key={destination.id}>
               <div className={`nav-link-custom ${activeId === destination.id ? 'active' : ''}`}>
                 <button
@@ -53,9 +79,11 @@ const Sidebar: React.FC<Props> = ({ destinations, activeId, onSelect, onAddClick
           ))}
         </Nav>
 
-        {destinations.length === 0 && (
+        {filteredDestinations.length === 0 && (
           <div className="sidebar-empty" role="status">
-            No destinations yet. Add one to get started.
+            {destinations.length === 0
+              ? 'No destinations yet. Add one to get started.'
+              : 'No destinations match this search.'}
           </div>
         )}
       </div>

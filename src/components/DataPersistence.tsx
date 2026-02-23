@@ -75,7 +75,7 @@ const DataPersistence: React.FC<Props> = ({ destinations, onImport }) => {
     <div className="d-flex flex-column align-items-end gap-2">
       <div className="d-flex gap-2">
       <Button
-        variant="outline-primary"
+        variant="outline-secondary"
         size="sm"
         className="d-flex align-items-center gap-2"
         onClick={handleExport}
@@ -84,7 +84,7 @@ const DataPersistence: React.FC<Props> = ({ destinations, onImport }) => {
       >
         <FaFileDownload /> Export
       </Button>
-      <Button variant="outline-primary" size="sm" className="d-flex align-items-center gap-2" onClick={handleImportClick} title="Import Data">
+      <Button variant="outline-secondary" size="sm" className="d-flex align-items-center gap-2" onClick={handleImportClick} title="Import Data">
         <FaFileUpload /> Import
       </Button>
       </div>

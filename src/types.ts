@@ -21,9 +21,22 @@ export interface ExtraCost {
   value: number;
 }
 
+export interface BudgetAttempt {
+  id: string;
+  name: string;
+  createdAt: number;
+  flightAssignments: Record<string, number>;
+  selectedAccommodationId: string;
+  totalCost: number;
+  remaining: number;
+  perPersonTotal: number;
+}
+
 export interface BudgetEstimatorState {
   flightAssignments: Record<string, number>;
   selectedAccommodationId: string;
+  fixedAttemptId: string;
+  attempts: BudgetAttempt[];
 }
 
 export interface Destination {

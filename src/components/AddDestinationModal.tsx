@@ -48,7 +48,9 @@ const AddDestinationModal: React.FC<Props> = ({ show, onHide, onAdd }) => {
       extraCosts: [],
       budgetEstimator: {
         flightAssignments: {},
-        selectedAccommodationId: ''
+        selectedAccommodationId: '',
+        fixedAttemptId: '',
+        attempts: []
       },
       flightDraft: {},
       accommodationDraft: {},

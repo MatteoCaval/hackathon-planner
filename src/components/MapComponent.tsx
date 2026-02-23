@@ -53,7 +53,7 @@ const MapComponent: React.FC<Props> = ({ destLat, destLng, destName }) => {
         </Marker>
 
         {/* Route Line */}
-        <Polyline positions={route as any} color="blue" />
+        <Polyline positions={route as any} color="#2b687b" weight={4} opacity={0.75} />
       </MapContainer>
     </div>
   );

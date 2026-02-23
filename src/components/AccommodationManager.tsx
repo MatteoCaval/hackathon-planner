@@ -1,9 +1,21 @@
 import React, { useMemo, useState } from 'react';
-import { Table, Button, Form, Card, Modal, InputGroup } from 'react-bootstrap';
+import { Table, Button, Form, Card, Modal, InputGroup, Row, Col, Badge } from 'react-bootstrap';
 import { v4 as uuidv4 } from 'uuid';
 import { Accommodation } from '../types';
-import { FaTrash, FaEdit, FaSave, FaExternalLinkAlt, FaPlus, FaHotel, FaClone, FaClipboard, FaListUl } from 'react-icons/fa';
+import {
+  FaTrash,
+  FaEdit,
+  FaSave,
+  FaExternalLinkAlt,
+  FaPlus,
+  FaHotel,
+  FaClone,
+  FaClipboard,
+  FaListUl,
+  FaFilter
+} from 'react-icons/fa';
 import { getUrlAutofill } from '../utils/urlAutofill';
+import { formatCurrency } from '../utils/budget';
 
 interface Props {
   accommodations: Accommodation[];
@@ -21,6 +33,8 @@ interface ParsedBulkAccommodation {
   endDate: string;
   error: string;
 }
+
+type SortBy = 'price' | 'description' | 'startDate';
 
 const parseBulkAccommodations = (bulkInput: string): ParsedBulkAccommodation[] => {
   return bulkInput
@@ -55,12 +69,21 @@ const parseBulkAccommodations = (bulkInput: string): ParsedBulkAccommodation[] =
     });
 };
 
-const AccommodationManager: React.FC<Props> = ({ accommodations, onChange, draft, onDraftChange }) => {
+const AccommodationManager: React.FC<Props> = ({
+  accommodations,
+  onChange,
+  draft,
+  onDraftChange
+}) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Accommodation>>({});
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkInput, setBulkInput] = useState('');
   const [attemptedAdd, setAttemptedAdd] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [maxPrice, setMaxPrice] = useState<string>('');
+  const [sortBy, setSortBy] = useState<SortBy>('price');
+  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
 
   const quickAddDescriptionRef = React.useRef<HTMLInputElement>(null);
   const quickAddEndDateRef = React.useRef<HTMLInputElement>(null);
@@ -100,14 +123,14 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange, draft
           try {
             (ref.current as { showPicker?: () => void }).showPicker?.();
           } catch {
-            // No-op when showPicker is unavailable.
+            // showPicker not available in every browser.
           }
         }
       }, 50);
     }
   };
 
-  const handleAdd = (focusNext: boolean = false) => {
+  const handleAdd = (focusNext = false) => {
     setAttemptedAdd(true);
     if (!(draft.link && typeof draft.totalPrice === 'number' && draft.totalPrice > 0)) {
       return;
@@ -119,8 +142,9 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange, draft
       description: draft.description || '',
       totalPrice: Number(draft.totalPrice),
       startDate: draft.startDate || '',
-      endDate: draft.endDate || '',
+      endDate: draft.endDate || ''
     };
+
     onChange([...accommodations, acc]);
     onDraftChange({});
     setAttemptedAdd(false);
@@ -218,7 +242,7 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange, draft
       totalPrice: row.totalPrice,
       link: row.link,
       startDate: row.startDate,
-      endDate: row.endDate,
+      endDate: row.endDate
     }));
 
     onChange([...accommodations, ...importedAccommodations]);
@@ -226,23 +250,54 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange, draft
     setShowBulkModal(false);
   };
 
+  const displayedAccommodations = useMemo(() => {
+    const parsedMaxPrice = Number(maxPrice);
+    const hasMaxPrice = Number.isFinite(parsedMaxPrice) && parsedMaxPrice > 0;
+    const query = searchQuery.trim().toLowerCase();
+
+    const filteredAccommodations = accommodations.filter((accommodation) => {
+      const matchesQuery = query.length === 0
+        || accommodation.description.toLowerCase().includes(query)
+        || accommodation.link.toLowerCase().includes(query);
+      const matchesPrice = !hasMaxPrice || accommodation.totalPrice <= parsedMaxPrice;
+      return matchesQuery && matchesPrice;
+    });
+
+    return filteredAccommodations.sort((a, b) => {
+      const direction = sortDirection === 'asc' ? 1 : -1;
+
+      if (sortBy === 'price') {
+        return (a.totalPrice - b.totalPrice) * direction;
+      }
+
+      if (sortBy === 'startDate') {
+        const aDate = a.startDate || '9999-12-31';
+        const bDate = b.startDate || '9999-12-31';
+        return aDate.localeCompare(bDate) * direction;
+      }
+
+      return (a.description || '').localeCompare(b.description || '') * direction;
+    });
+  }, [accommodations, maxPrice, searchQuery, sortBy, sortDirection]);
+
   return (
     <>
-      <Card className="mb-4 h-100">
-        <Card.Header className="position-sticky top-0 z-2">
-          <div className="d-flex align-items-center justify-content-between mb-3">
+      <Card className="workspace-card manager-card">
+        <Card.Header className="workspace-card-header">
+          <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
             <div className="d-flex align-items-center gap-2">
               <FaHotel className="text-primary" aria-hidden="true" />
-              <span className="h6 mb-0 fw-bold">Accommodation Options</span>
+              <h2 className="workspace-card-title m-0">Accommodation Options</h2>
+              <Badge bg="light" text="dark">{accommodations.length}</Badge>
             </div>
-            <Button size="sm" variant="outline-primary" onClick={() => setShowBulkModal(true)}>
+            <Button size="sm" variant="outline-secondary" onClick={() => setShowBulkModal(true)}>
               <FaListUl className="me-1" /> Bulk Add
             </Button>
           </div>
 
-          <div className="subtle-text mb-2">Quick Add (Press Enter to save, Cmd/Ctrl + Enter to save and continue)</div>
-          <div className="row g-2 align-items-end">
-            <div className="col-md-3">
+          <div className="subtle-text mb-2">Quick add (Enter to save, Cmd/Ctrl + Enter to save and keep typing).</div>
+          <div className="manager-quick-add-grid">
+            <Form.Group>
               <Form.Label className="small text-muted mb-1">Description</Form.Label>
               <Form.Control
                 ref={quickAddDescriptionRef}
@@ -253,8 +308,9 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange, draft
                 onKeyDown={handleQuickAddKeyDown}
                 aria-label="Accommodation description"
               />
-            </div>
-            <div className="col-md-2">
+            </Form.Group>
+
+            <Form.Group>
               <Form.Label className="small text-muted mb-1">Start</Form.Label>
               <Form.Control
                 size="sm"
@@ -265,8 +321,9 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange, draft
                 onKeyDown={handleQuickAddKeyDown}
                 aria-label="Accommodation start date"
               />
-            </div>
-            <div className="col-md-2">
+            </Form.Group>
+
+            <Form.Group>
               <Form.Label className="small text-muted mb-1">End</Form.Label>
               <Form.Control
                 ref={quickAddEndDateRef}
@@ -278,8 +335,9 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange, draft
                 onKeyDown={handleQuickAddKeyDown}
                 aria-label="Accommodation end date"
               />
-            </div>
-            <div className="col-md-3">
+            </Form.Group>
+
+            <Form.Group>
               <Form.Label className="small text-muted mb-1">Link</Form.Label>
               <InputGroup size="sm">
                 <Form.Control
@@ -294,8 +352,9 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange, draft
                   <FaClipboard />
                 </Button>
               </InputGroup>
-            </div>
-            <div className="col-md-2">
+            </Form.Group>
+
+            <Form.Group>
               <Form.Label className="small text-muted mb-1">Total Price</Form.Label>
               <Form.Control
                 size="sm"
@@ -309,14 +368,14 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange, draft
                 onKeyDown={handleQuickAddKeyDown}
                 aria-label="Accommodation total price"
               />
-            </div>
+            </Form.Group>
           </div>
 
           {(attemptedAdd && (!isDraftLinkValid || !isDraftPriceValid)) && (
             <div className="inline-status error" role="status">Link and total price are required.</div>
           )}
 
-          <div className="d-flex justify-content-end mt-2">
+          <div className="d-flex justify-content-end mt-3">
             <Button size="sm" variant="primary" onClick={() => handleAdd(false)} disabled={!isDraftValid}>
               <FaPlus className="me-1" /> Add Accommodation
             </Button>
@@ -324,16 +383,60 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange, draft
         </Card.Header>
 
         <Card.Body className="p-0">
-          <Table hover responsive className="mb-0 align-middle">
+          <div className="manager-controls">
+            <Row className="g-2 align-items-end">
+              <Col md={5}>
+                <Form.Label className="small text-muted mb-1">Search</Form.Label>
+                <Form.Control
+                  size="sm"
+                  placeholder="Filter by description or link"
+                  value={searchQuery}
+                  onChange={(event) => setSearchQuery(event.target.value)}
+                  aria-label="Search accommodation options"
+                />
+              </Col>
+              <Col md={3}>
+                <Form.Label className="small text-muted mb-1">Max total</Form.Label>
+                <InputGroup size="sm">
+                  <InputGroup.Text><FaFilter /></InputGroup.Text>
+                  <Form.Control
+                    type="number"
+                    min="0"
+                    step="10"
+                    value={maxPrice}
+                    onChange={(event) => setMaxPrice(event.target.value)}
+                    aria-label="Filter by max accommodation price"
+                  />
+                </InputGroup>
+              </Col>
+              <Col md={2}>
+                <Form.Label className="small text-muted mb-1">Sort by</Form.Label>
+                <Form.Select size="sm" value={sortBy} onChange={(event) => setSortBy(event.target.value as SortBy)} aria-label="Sort accommodation by">
+                  <option value="price">Price</option>
+                  <option value="description">Name</option>
+                  <option value="startDate">Start date</option>
+                </Form.Select>
+              </Col>
+              <Col md={2}>
+                <Form.Label className="small text-muted mb-1">Direction</Form.Label>
+                <Form.Select size="sm" value={sortDirection} onChange={(event) => setSortDirection(event.target.value as 'asc' | 'desc')} aria-label="Sort order">
+                  <option value="asc">Asc</option>
+                  <option value="desc">Desc</option>
+                </Form.Select>
+              </Col>
+            </Row>
+          </div>
+
+          <Table hover responsive className="mb-0 align-middle manager-table">
             <thead>
               <tr>
-                <th style={{ width: '50%' }}>Description & Dates</th>
-                <th style={{ width: '20%' }}>Total Price</th>
-                <th style={{ width: '30%' }}></th>
+                <th style={{ width: '52%' }}>Option</th>
+                <th style={{ width: '18%' }}>Total</th>
+                <th style={{ width: '30%' }} />
               </tr>
             </thead>
             <tbody>
-              {accommodations.map((accommodation) => (
+              {displayedAccommodations.map((accommodation) => (
                 <tr key={accommodation.id}>
                   <td>
                     {editingId === accommodation.id ? (
@@ -344,7 +447,7 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange, draft
                           value={editForm.description || ''}
                           onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
                         />
-                        <div className="d-flex gap-1">
+                        <div className="d-flex gap-2">
                           <Form.Control
                             size="sm"
                             type="date"
@@ -352,16 +455,14 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange, draft
                             value={editForm.startDate || ''}
                             onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleStartDateChange(e, true, setEditForm, editForm)}
                           />
-                          {editForm.startDate && (
-                            <Form.Control
-                              ref={editAccEndDateRef}
-                              size="sm"
-                              type="date"
-                              value={editForm.endDate || ''}
-                              min={editForm.startDate || ''}
-                              onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })}
-                            />
-                          )}
+                          <Form.Control
+                            ref={editAccEndDateRef}
+                            size="sm"
+                            type="date"
+                            value={editForm.endDate || ''}
+                            min={editForm.startDate || ''}
+                            onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })}
+                          />
                         </div>
                         <Form.Control
                           size="sm"
@@ -372,12 +473,12 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange, draft
                       </div>
                     ) : (
                       <>
-                        <div className="fw-bold text-dark">{accommodation.description || 'Accommodation Option'}</div>
-                        <div className="text-muted small my-1">
+                        <div className="fw-semibold">{accommodation.description || 'Accommodation Option'}</div>
+                        <div className="small subtle-text my-1">
                           {accommodation.startDate || 'No start date'} <span className="mx-1">to</span> {accommodation.endDate || 'No end date'}
                         </div>
-                        <a href={accommodation.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-flex align-items-center gap-1">
-                          View Property <FaExternalLinkAlt size={10} />
+                        <a href={accommodation.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-inline-flex align-items-center gap-1">
+                          View Stay <FaExternalLinkAlt size={10} />
                         </a>
                       </>
                     )}
@@ -393,14 +494,14 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange, draft
                         onChange={(e) => setEditForm({ ...editForm, totalPrice: Number(e.target.value) })}
                       />
                     ) : (
-                      <span className="fw-bold text-primary">€{accommodation.totalPrice}</span>
+                      <strong>{formatCurrency(accommodation.totalPrice)}</strong>
                     )}
                   </td>
                   <td className="text-end" style={{ verticalAlign: editingId === accommodation.id ? 'top' : 'middle' }}>
                     {editingId === accommodation.id ? (
                       <div className="d-flex gap-2 justify-content-end">
                         <Button size="sm" variant="success" onClick={saveEdit} aria-label="Save accommodation changes"><FaSave /></Button>
-                        <Button size="sm" variant="secondary" onClick={cancelEdit}>Cancel</Button>
+                        <Button size="sm" variant="outline-secondary" onClick={cancelEdit}>Cancel</Button>
                       </div>
                     ) : (
                       <>
@@ -418,10 +519,11 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange, draft
                   </td>
                 </tr>
               ))}
-              {accommodations.length === 0 && (
+
+              {displayedAccommodations.length === 0 && (
                 <tr>
-                  <td colSpan={3} className="text-center text-muted py-4">
-                    No accommodation options yet. Use Quick Add above.
+                  <td colSpan={3} className="text-center py-5">
+                    <div className="empty-inline-state">No matching stays. Adjust filters or add a new option.</div>
                   </td>
                 </tr>
               )}
@@ -480,7 +582,7 @@ const AccommodationManager: React.FC<Props> = ({ accommodations, onChange, draft
           )}
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="secondary" onClick={() => setShowBulkModal(false)}>Cancel</Button>
+          <Button variant="outline-secondary" onClick={() => setShowBulkModal(false)}>Cancel</Button>
           <Button variant="primary" onClick={handleBulkImport} disabled={validBulkAccommodations.length === 0}>
             Import {validBulkAccommodations.length > 0 ? validBulkAccommodations.length : ''} Accommodations
           </Button>
