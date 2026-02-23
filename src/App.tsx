@@ -243,35 +243,37 @@ function App() {
   };
 
   return (
-    <div className="d-flex flex-column vh-100">
-      <Navbar className="flex-shrink-0 z-3 border-bottom bg-white py-2">
+    <div className="app-shell d-flex flex-column">
+      <Navbar className="app-topbar flex-shrink-0 z-3 py-2">
         <Container fluid className="px-4">
-          <Navbar.Brand className="text-primary d-flex align-items-center gap-2 fw-bold me-4">
-             <div className="bg-primary text-white rounded p-1 d-flex align-items-center justify-content-center" style={{ width: '32px', height: '32px' }}>
+          <Navbar.Brand className="app-brand d-flex align-items-center gap-2 me-4">
+             <div className="app-brand-icon" aria-hidden="true">
                 <FaPlane size={18} />
              </div>
-             <span className="d-none d-md-inline">Hackathon Planner</span>
+             <span>Hackathon Planner</span>
           </Navbar.Brand>
 
-          <div className="d-flex align-items-center gap-3 me-auto border-start ps-3">
-            <InputGroup size="sm" style={{ width: '160px' }}>
+          <div className="settings-cluster d-flex align-items-center gap-3 flex-wrap me-auto">
+            <InputGroup size="sm" style={{ width: '170px' }}>
                 <InputGroup.Text className="bg-light text-muted border-end-0"><FaWallet /></InputGroup.Text>
                 <Form.Control 
                     type="number" 
                     step="10"
                     className="border-start-0"
                     placeholder="Budget"
+                    aria-label="Total budget"
                     value={settings.totalBudget}
                     onChange={(e) => setSettings({...settings, totalBudget: Number(e.target.value)})}
                 />
             </InputGroup>
             
-            <InputGroup size="sm" style={{ width: '120px' }}>
+            <InputGroup size="sm" style={{ width: '130px' }}>
                 <InputGroup.Text className="bg-light text-muted border-end-0"><FaUsers /></InputGroup.Text>
                 <Form.Control 
                     type="number" 
                     className="border-start-0"
                     placeholder="Ppl"
+                    aria-label="People count"
                     value={settings.peopleCount}
                     onChange={(e) => setSettings({...settings, peopleCount: Number(e.target.value)})}
                 />
@@ -282,7 +284,7 @@ function App() {
         </Container>
       </Navbar>
       
-      <div className="d-flex flex-grow-1 overflow-hidden">
+      <div className="app-main d-flex flex-grow-1 overflow-hidden">
         <Sidebar 
           destinations={destinations} 
           activeId={activeId} 
@@ -291,7 +293,7 @@ function App() {
           onRemove={handleRemoveDestination}
         />
         
-        <main className="flex-grow-1 overflow-auto bg-slate-50 position-relative" style={{ backgroundColor: '#f8fafc' }}>
+        <main className="app-content flex-grow-1 overflow-auto position-relative" aria-live="polite">
           {activeDestination ? (
             <DestinationView 
               destination={activeDestination} 
@@ -299,16 +301,18 @@ function App() {
               settings={settings}
             />
           ) : (
-            <div className="d-flex flex-column align-items-center justify-content-center h-100 text-muted">
-              <div className="bg-white p-5 rounded-circle shadow-sm mb-4 d-flex align-items-center justify-content-center" style={{ width: '120px', height: '120px' }}>
-                 <FaPlane size={48} className="text-primary opacity-50" />
+            <section className="empty-state" aria-label="No destination selected">
+              <div>
+              <div className="empty-state-icon">
+                 <FaPlane size={36} />
               </div>
-              <h3 className="fw-light">Ready for takeoff?</h3>
-              <p className="mb-4">Select or add a destination from the sidebar to start planning.</p>
+              <h3 className="fw-semibold mb-2">Ready for takeoff?</h3>
+              <p className="subtle-text mb-4">Select or add a destination from the sidebar to start planning.</p>
               <Button variant="primary" size="lg" onClick={() => setShowAddModal(true)}>
                 <FaPlus className="me-2" /> Start Planning
               </Button>
-            </div>
+              </div>
+            </section>
           )}
         </main>
       </div>

@@ -13,7 +13,6 @@ interface Props {
 }
 
 const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate }) => {
-  
   const handleFlightsChange = (flights: Flight[]) => {
     const validFlightIds = new Set(flights.map((flight) => flight.id));
     const nextFlightAssignments = Object.entries(destination.budgetEstimator.flightAssignments).reduce<Record<string, number>>((acc, [flightId, count]) => {
@@ -91,67 +90,82 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate }) =
   };
 
   return (
-    <div className="container-fluid px-4 py-3">
-      <div className="d-flex justify-content-between align-items-center mb-4">
-        <h2 className="display-6 fw-bold mb-0 text-primary">{destination.name}</h2>
-      </div>
+    <div className="container-fluid px-0 py-1">
+      <header className="d-flex flex-wrap justify-content-between align-items-end gap-3 mb-4">
+        <div>
+          <h1 className="panel-title mb-1">{destination.name}</h1>
+          <p className="subtle-text mb-0">
+            Coordinates: {destination.latitude.toFixed(4)}, {destination.longitude.toFixed(4)}
+          </p>
+        </div>
+      </header>
 
       <Row className="mb-4 g-4">
         <Col xs={12} lg={6}>
-          <Card className="h-100 border-0 shadow-sm">
+          <Card className="h-100">
+            <Card.Header>
+              <h3 className="panel-title fs-6">Planning Notes</h3>
+            </Card.Header>
             <Card.Body>
               <Form.Group controlId={`notes-${destination.id}`}>
-                <Form.Label className="fw-semibold mb-2">Notes</Form.Label>
+                <Form.Label className="subtle-text mb-2">Destination notes</Form.Label>
                 <Form.Control
                   as="textarea"
-                  rows={10}
+                  rows={11}
                   value={destination.notes}
                   onChange={(e) => handleNotesChange(e.target.value)}
                   placeholder="Add planning notes for this destination..."
-                  style={{ resize: 'vertical', minHeight: '300px' }}
+                  style={{ resize: 'vertical', minHeight: '260px' }}
                 />
               </Form.Group>
             </Card.Body>
           </Card>
         </Col>
         <Col xs={12} lg={6}>
-          <MapComponent
-            destLat={destination.latitude}
-            destLng={destination.longitude}
-            destName={destination.name}
-          />
+          <Card className="h-100">
+            <Card.Header>
+              <h3 className="panel-title fs-6">Route Map</h3>
+            </Card.Header>
+            <Card.Body className="p-3">
+              <MapComponent
+                destLat={destination.latitude}
+                destLng={destination.longitude}
+                destName={destination.name}
+              />
+            </Card.Body>
+          </Card>
         </Col>
       </Row>
 
       <Row className="mb-4">
         <Col xs={12}>
-            <BudgetCalculator 
-                flights={destination.flights} 
-                accommodations={destination.accommodations} 
-                settings={settings}
-                extraCosts={destination.extraCosts}
-                onExtraCostsChange={handleExtraCostsChange}
-                flightAssignments={destination.budgetEstimator.flightAssignments}
-                onFlightAssignmentsChange={handleFlightAssignmentsChange}
-                selectedAccommodationId={destination.budgetEstimator.selectedAccommodationId}
-                onSelectedAccommodationChange={handleSelectedAccommodationChange}
-            />
+          <BudgetCalculator
+            flights={destination.flights}
+            accommodations={destination.accommodations}
+            settings={settings}
+            extraCosts={destination.extraCosts}
+            onExtraCostsChange={handleExtraCostsChange}
+            flightAssignments={destination.budgetEstimator.flightAssignments}
+            onFlightAssignmentsChange={handleFlightAssignmentsChange}
+            selectedAccommodationId={destination.budgetEstimator.selectedAccommodationId}
+            onSelectedAccommodationChange={handleSelectedAccommodationChange}
+          />
         </Col>
       </Row>
 
       <Row className="g-4">
         <Col lg={6}>
-          <FlightManager 
-            flights={destination.flights} 
-            onChange={handleFlightsChange} 
+          <FlightManager
+            flights={destination.flights}
+            onChange={handleFlightsChange}
             draft={destination.flightDraft}
             onDraftChange={handleFlightDraftChange}
           />
         </Col>
         <Col lg={6}>
-          <AccommodationManager 
-            accommodations={destination.accommodations} 
-            onChange={handleAccChange} 
+          <AccommodationManager
+            accommodations={destination.accommodations}
+            onChange={handleAccChange}
             draft={destination.accommodationDraft}
             onDraftChange={handleAccommodationDraftChange}
           />

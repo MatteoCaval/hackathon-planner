@@ -34,7 +34,7 @@ const MapComponent: React.FC<Props> = ({ destLat, destLng, destName }) => {
   const route = [DUBLIN_COORDS, destCoords];
 
   return (
-    <div style={{ height: '300px', width: '100%', marginBottom: '20px', borderRadius: '8px', overflow: 'hidden' }}>
+    <div className="map-shell" role="region" aria-label={`Map route from Dublin to ${destName}`}>
       <MapContainer center={destCoords} zoom={4} style={{ height: '100%', width: '100%' }}>
         <ChangeView center={destCoords} />
         <TileLayer

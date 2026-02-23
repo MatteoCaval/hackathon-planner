@@ -10,8 +10,14 @@ interface Props {
 
 const DataPersistence: React.FC<Props> = ({ destinations, onImport }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [status, setStatus] = React.useState<{ kind: 'success' | 'error'; message: string } | null>(null);
 
   const handleExport = () => {
+    if (destinations.length === 0) {
+      setStatus({ kind: 'error', message: 'No data to export yet.' });
+      return;
+    }
+
     const dataStr = JSON.stringify(destinations, null, 2);
     const blob = new Blob([dataStr], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
@@ -22,6 +28,7 @@ const DataPersistence: React.FC<Props> = ({ destinations, onImport }) => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    setStatus({ kind: 'success', message: 'Export complete.' });
   };
 
   const handleImportClick = () => {
@@ -44,15 +51,16 @@ const DataPersistence: React.FC<Props> = ({ destinations, onImport }) => {
             if (isValid) {
                 // Directly override without confirmation
                 onImport(parsedData);
+                setStatus({ kind: 'success', message: `Imported ${parsedData.length} destinations.` });
             } else {
-                alert('Invalid file format. Please upload a valid Hackathon Planner JSON file.');
+                setStatus({ kind: 'error', message: 'Invalid file format. Upload a valid planner JSON file.' });
             }
         } else {
-            alert('Invalid file format. Data must be an array.');
+            setStatus({ kind: 'error', message: 'Invalid file format. Data must be an array.' });
         }
       } catch (error) {
         console.error('Error importing data:', error);
-        alert('Failed to parse file. Ensure it is a valid JSON.');
+        setStatus({ kind: 'error', message: 'Failed to parse file. Ensure it is valid JSON.' });
       }
       
       // Reset input so same file can be selected again if needed
@@ -64,13 +72,22 @@ const DataPersistence: React.FC<Props> = ({ destinations, onImport }) => {
   };
 
   return (
-    <div className="d-flex gap-2">
-      <Button variant="outline-primary" size="sm" className="d-flex align-items-center gap-2" onClick={handleExport} title="Export Data">
+    <div className="d-flex flex-column align-items-end gap-2">
+      <div className="d-flex gap-2">
+      <Button
+        variant="outline-primary"
+        size="sm"
+        className="d-flex align-items-center gap-2"
+        onClick={handleExport}
+        title="Export Data"
+        disabled={destinations.length === 0}
+      >
         <FaFileDownload /> Export
       </Button>
       <Button variant="outline-primary" size="sm" className="d-flex align-items-center gap-2" onClick={handleImportClick} title="Import Data">
         <FaFileUpload /> Import
       </Button>
+      </div>
       <input 
         type="file" 
         ref={fileInputRef} 
@@ -78,6 +95,11 @@ const DataPersistence: React.FC<Props> = ({ destinations, onImport }) => {
         accept=".json" 
         onChange={handleFileChange}
       />
+      {status && (
+        <div className={`inline-status ${status.kind === 'error' ? 'error' : 'success'}`} role="status" aria-live="polite">
+          {status.message}
+        </div>
+      )}
     </div>
   );
 };
