@@ -327,6 +327,110 @@ const normalizeDestination = (destination: LegacyDestination): Destination => ({
   accommodationDraft: normalizeAccommodationDraft(destination.accommodationDraft)
 });
 
+const parseNumberValue = (value: unknown): number | null => {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+  if (typeof value === 'string' && value.trim() !== '') {
+    const parsed = Number(value);
+    if (Number.isFinite(parsed)) {
+      return parsed;
+    }
+  }
+  return null;
+};
+
+const normalizeFlightList = (flights: unknown): Flight[] => {
+  if (!Array.isArray(flights)) {
+    return [];
+  }
+
+  return flights
+    .map((flight) => {
+      if (!flight || typeof flight !== 'object' || Array.isArray(flight)) {
+        return null;
+      }
+
+      const typedFlight = flight as Record<string, unknown>;
+      if (typeof typedFlight.id !== 'string' || !typedFlight.id.trim()) {
+        return null;
+      }
+
+      const parsedPrice = parseNumberValue(typedFlight.pricePerPerson);
+      return {
+        id: typedFlight.id,
+        link: typeof typedFlight.link === 'string' ? typedFlight.link : '',
+        description: typeof typedFlight.description === 'string' ? typedFlight.description : '',
+        startDate: typeof typedFlight.startDate === 'string' ? typedFlight.startDate : '',
+        endDate: typeof typedFlight.endDate === 'string' ? typedFlight.endDate : '',
+        pricePerPerson: parsedPrice !== null && parsedPrice >= 0 ? parsedPrice : 0
+      };
+    })
+    .filter((flight): flight is Flight => flight !== null);
+};
+
+const normalizeAccommodationList = (accommodations: unknown): Accommodation[] => {
+  if (!Array.isArray(accommodations)) {
+    return [];
+  }
+
+  return accommodations
+    .map((accommodation) => {
+      if (!accommodation || typeof accommodation !== 'object' || Array.isArray(accommodation)) {
+        return null;
+      }
+
+      const typedAccommodation = accommodation as Record<string, unknown>;
+      if (typeof typedAccommodation.id !== 'string' || !typedAccommodation.id.trim()) {
+        return null;
+      }
+
+      const parsedPrice = parseNumberValue(typedAccommodation.totalPrice);
+      return {
+        id: typedAccommodation.id,
+        link: typeof typedAccommodation.link === 'string' ? typedAccommodation.link : '',
+        description: typeof typedAccommodation.description === 'string' ? typedAccommodation.description : '',
+        startDate: typeof typedAccommodation.startDate === 'string' ? typedAccommodation.startDate : '',
+        endDate: typeof typedAccommodation.endDate === 'string' ? typedAccommodation.endDate : '',
+        totalPrice: parsedPrice !== null && parsedPrice >= 0 ? parsedPrice : 0
+      };
+    })
+    .filter((accommodation): accommodation is Accommodation => accommodation !== null);
+};
+
+const normalizeDestinationCandidate = (candidate: unknown): Destination | null => {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    return null;
+  }
+
+  const parsed = candidate as Record<string, unknown>;
+  if (typeof parsed.id !== 'string' || !parsed.id.trim() || typeof parsed.name !== 'string' || !parsed.name.trim()) {
+    return null;
+  }
+
+  const latitude = parseNumberValue(parsed.latitude);
+  const longitude = parseNumberValue(parsed.longitude);
+  if (latitude === null || longitude === null) {
+    return null;
+  }
+
+  const legacyDestination: LegacyDestination = {
+    id: parsed.id,
+    name: parsed.name,
+    latitude,
+    longitude,
+    notes: parsed.notes,
+    extraCosts: parsed.extraCosts,
+    budgetEstimator: parsed.budgetEstimator,
+    flightDraft: parsed.flightDraft,
+    accommodationDraft: parsed.accommodationDraft,
+    flights: normalizeFlightList(parsed.flights),
+    accommodations: normalizeAccommodationList(parsed.accommodations)
+  };
+
+  return normalizeDestination(legacyDestination);
+};
+
 const normalizeSettings = (candidate: unknown, fallback: PlannerSettings): PlannerSettings => {
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
     return fallback;
@@ -343,24 +447,6 @@ const normalizeSettings = (candidate: unknown, fallback: PlannerSettings): Plann
   return { totalBudget, peopleCount };
 };
 
-const isLegacyDestination = (candidate: unknown): candidate is LegacyDestination => {
-  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
-    return false;
-  }
-
-  const parsed = candidate as Record<string, unknown>;
-  return (
-    typeof parsed.id === 'string' &&
-    typeof parsed.name === 'string' &&
-    typeof parsed.latitude === 'number' &&
-    Number.isFinite(parsed.latitude) &&
-    typeof parsed.longitude === 'number' &&
-    Number.isFinite(parsed.longitude) &&
-    Array.isArray(parsed.flights) &&
-    Array.isArray(parsed.accommodations)
-  );
-};
-
 const parseTripSyncPayload = (payload: unknown, fallbackSettings: PlannerSettings): { destinations: Destination[]; settings: PlannerSettings; remoteUpdatedAt: number | null } | null => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return null;
@@ -372,10 +458,10 @@ const parseTripSyncPayload = (payload: unknown, fallbackSettings: PlannerSetting
   }
 
   const destinations = typedPayload.destinations
-    .filter((destination): destination is LegacyDestination => isLegacyDestination(destination))
-    .map((destination) => normalizeDestination(destination));
+    .map((destination) => normalizeDestinationCandidate(destination))
+    .filter((destination): destination is Destination => destination !== null);
 
-  if (destinations.length !== typedPayload.destinations.length) {
+  if (typedPayload.destinations.length > 0 && destinations.length === 0) {
     return null;
   }
 
@@ -768,6 +854,11 @@ function App() {
                     </Dropdown.Menu>
                   </Dropdown>
                 </div>
+                {syncStatus.kind === 'warning' || syncStatus.kind === 'error' ? (
+                  <div className={`inline-status ${syncStatus.kind} mt-1`} role="status" aria-live="polite">
+                    {syncStatus.message}
+                  </div>
+                ) : null}
               </section>
 
               <DataPersistence destinations={destinations} onImport={handleImport} />
