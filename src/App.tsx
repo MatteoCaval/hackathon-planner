@@ -741,7 +741,7 @@ function App() {
 
   return (
     <div className="app-shell d-flex flex-column">
-      <Navbar className="app-topbar flex-shrink-0 z-3 py-2">
+      <Navbar className="app-topbar flex-shrink-0 py-2">
         <Container fluid className="px-4">
           <div className="topbar-grid">
             <div className="d-flex align-items-center gap-3 flex-wrap">

@@ -137,6 +137,8 @@ a:hover {
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--color-neutral-200);
   box-shadow: var(--shadow-sm);
+  position: relative;
+  z-index: 20;
 }
 
 .topbar-grid {
