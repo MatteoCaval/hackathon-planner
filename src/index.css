@@ -190,6 +190,30 @@ a:hover {
   background: var(--bg-surface);
   padding: var(--space-2) var(--space-3);
   box-shadow: var(--shadow-sm);
+  min-width: 360px;
+}
+
+.trip-sync-controls {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) auto auto auto;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.trip-sync-controls .form-control {
+  text-transform: uppercase;
+}
+
+.trip-sync-menu {
+  width: 320px;
+  max-width: 80vw;
+  padding: 0.6rem 0.75rem;
+}
+
+.trip-sync-menu-line {
+  font-size: var(--font-size-xs);
+  color: var(--color-neutral-600);
+  line-height: 1.4;
 }
 
 .workspace-pane {
@@ -898,6 +922,11 @@ a:hover {
 
   .live-share-panel {
     width: 100%;
+    min-width: 0;
+  }
+
+  .trip-sync-controls {
+    grid-template-columns: 1fr 1fr;
   }
 
   .budget-status-banner {

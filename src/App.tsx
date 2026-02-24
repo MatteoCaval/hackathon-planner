@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { Button, Container, Form, InputGroup, Navbar } from 'react-bootstrap';
+import { Button, Container, Dropdown, Form, InputGroup, Navbar, Spinner } from 'react-bootstrap';
+import { get, ref, set } from 'firebase/database';
 import Sidebar from './components/Sidebar';
 import DestinationView from './components/DestinationView';
 import AddDestinationModal from './components/AddDestinationModal';
@@ -8,6 +9,7 @@ import PersistentBudgetStatus from './components/PersistentBudgetStatus';
 import { useLocalStorage } from './useLocalStorage';
 import { Accommodation, BudgetAttempt, BudgetEstimatorState, Destination, ExtraCost, Flight, PlannerSettings } from './types';
 import { FaPlane, FaPlus, FaUsers, FaWallet } from 'react-icons/fa';
+import { firebaseDatabase, isFirebaseConfigured } from './firebase';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'leaflet/dist/leaflet.css';
 
@@ -35,8 +37,49 @@ type LegacyDestination = Omit<Destination, 'notes' | 'extraCosts' | 'budgetEstim
   flightDraft?: unknown;
   accommodationDraft?: unknown;
 };
+type TripSyncPayload = {
+  destinations?: unknown;
+  settings?: unknown;
+  meta?: {
+    updatedAt?: unknown;
+    updatedBy?: unknown;
+  };
+};
+type SyncStatusKind = 'neutral' | 'success' | 'warning' | 'error';
+type SyncStatus = { kind: SyncStatusKind; message: string };
 
 const DEFAULT_SETTINGS: PlannerSettings = { totalBudget: 5000, peopleCount: 5 };
+const TRIP_CODE_MIN_LENGTH = 4;
+const TRIP_CODE_MAX_LENGTH = 12;
+const REMOTE_CHECK_INTERVAL_MS = 15000;
+
+const normalizeTripCode = (value: string): string => value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, TRIP_CODE_MAX_LENGTH);
+
+const parseTimestamp = (value: unknown): number | null => {
+  if (typeof value !== 'number' || !Number.isFinite(value) || value <= 0) {
+    return null;
+  }
+  return value;
+};
+
+const formatTimestamp = (value: number | null): string => {
+  return value ? new Date(value).toLocaleString() : 'Not available';
+};
+
+const getOrCreateSyncClientId = (): string => {
+  const key = 'hackathon-sync-client-id';
+  const existingValue = window.localStorage.getItem(key);
+  if (existingValue) {
+    return existingValue;
+  }
+
+  const generatedValue = typeof window.crypto?.randomUUID === 'function'
+    ? window.crypto.randomUUID()
+    : `sync-${Math.random().toString(36).slice(2, 12)}`;
+
+  window.localStorage.setItem(key, generatedValue);
+  return generatedValue;
+};
 
 const normalizeExtraCosts = (extraCosts: unknown): ExtraCost[] => {
   if (typeof extraCosts === 'number') {
@@ -284,11 +327,86 @@ const normalizeDestination = (destination: LegacyDestination): Destination => ({
   accommodationDraft: normalizeAccommodationDraft(destination.accommodationDraft)
 });
 
+const normalizeSettings = (candidate: unknown, fallback: PlannerSettings): PlannerSettings => {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    return fallback;
+  }
+
+  const parsed = candidate as Record<string, unknown>;
+  const totalBudget = typeof parsed.totalBudget === 'number' && Number.isFinite(parsed.totalBudget) && parsed.totalBudget >= 0
+    ? parsed.totalBudget
+    : fallback.totalBudget;
+  const peopleCount = typeof parsed.peopleCount === 'number' && Number.isFinite(parsed.peopleCount) && parsed.peopleCount > 0
+    ? Math.floor(parsed.peopleCount)
+    : fallback.peopleCount;
+
+  return { totalBudget, peopleCount };
+};
+
+const isLegacyDestination = (candidate: unknown): candidate is LegacyDestination => {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    return false;
+  }
+
+  const parsed = candidate as Record<string, unknown>;
+  return (
+    typeof parsed.id === 'string' &&
+    typeof parsed.name === 'string' &&
+    typeof parsed.latitude === 'number' &&
+    Number.isFinite(parsed.latitude) &&
+    typeof parsed.longitude === 'number' &&
+    Number.isFinite(parsed.longitude) &&
+    Array.isArray(parsed.flights) &&
+    Array.isArray(parsed.accommodations)
+  );
+};
+
+const parseTripSyncPayload = (payload: unknown, fallbackSettings: PlannerSettings): { destinations: Destination[]; settings: PlannerSettings; remoteUpdatedAt: number | null } | null => {
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+    return null;
+  }
+
+  const typedPayload = payload as TripSyncPayload;
+  if (!Array.isArray(typedPayload.destinations)) {
+    return null;
+  }
+
+  const destinations = typedPayload.destinations
+    .filter((destination): destination is LegacyDestination => isLegacyDestination(destination))
+    .map((destination) => normalizeDestination(destination));
+
+  if (destinations.length !== typedPayload.destinations.length) {
+    return null;
+  }
+
+  return {
+    destinations,
+    settings: normalizeSettings(typedPayload.settings, fallbackSettings),
+    remoteUpdatedAt: parseTimestamp(typedPayload.meta?.updatedAt)
+  };
+};
+
 function App() {
   const [destinations, setDestinations] = useLocalStorage<Destination[]>('hackathon-destinations', []);
   const [settings, setSettings] = useLocalStorage<PlannerSettings>('hackathon-settings', DEFAULT_SETTINGS);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
+  const [tripCode, setTripCode] = useLocalStorage<string>('hackathon-trip-code', '');
+  const [lastKnownRemoteByCode, setLastKnownRemoteByCode] = useLocalStorage<Record<string, number>>('hackathon-trip-sync-known-remote', {});
+  const [lastLocalPushByCode, setLastLocalPushByCode] = useLocalStorage<Record<string, number>>('hackathon-trip-sync-last-push', {});
+  const [syncStatus, setSyncStatus] = useState<SyncStatus>({ kind: 'neutral', message: 'Enter a trip code, then pull or push manually.' });
+  const [isPulling, setIsPulling] = useState(false);
+  const [isPushing, setIsPushing] = useState(false);
+  const [latestRemoteUpdatedAt, setLatestRemoteUpdatedAt] = useState<number | null>(null);
+  const [lastRemoteCheckAt, setLastRemoteCheckAt] = useState<number | null>(null);
+  const [syncClientId] = useState(getOrCreateSyncClientId);
+
+  const normalizedTripCode = normalizeTripCode(tripCode);
+  const hasValidTripCode = normalizedTripCode.length >= TRIP_CODE_MIN_LENGTH;
+  const isTripSyncAvailable = isFirebaseConfigured && firebaseDatabase !== null;
+  const lastKnownRemoteAtForCode = hasValidTripCode ? (lastKnownRemoteByCode[normalizedTripCode] ?? 0) : 0;
+  const lastLocalPushAtForCode = hasValidTripCode ? (lastLocalPushByCode[normalizedTripCode] ?? 0) : 0;
+  const hasRemoteChangesSinceLastSync = latestRemoteUpdatedAt !== null && latestRemoteUpdatedAt > lastKnownRemoteAtForCode;
 
   useEffect(() => {
     if (!activeId && destinations.length > 0) {
@@ -323,6 +441,62 @@ function App() {
       setDestinations(destinations.map((destination) => normalizeDestination(destination as LegacyDestination)));
     }
   }, [destinations, setDestinations]);
+
+  useEffect(() => {
+    const database = firebaseDatabase;
+
+    if (!isTripSyncAvailable || !hasValidTripCode || !database) {
+      setLatestRemoteUpdatedAt(null);
+      setLastRemoteCheckAt(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    const checkRemoteUpdatedAt = async () => {
+      try {
+        const snapshot = await get(ref(database, `trips/${normalizedTripCode}/meta/updatedAt`));
+        if (cancelled) {
+          return;
+        }
+        setLatestRemoteUpdatedAt(parseTimestamp(snapshot.val()));
+      } catch {
+        if (cancelled) {
+          return;
+        }
+        setLatestRemoteUpdatedAt(null);
+      } finally {
+        if (!cancelled) {
+          setLastRemoteCheckAt(Date.now());
+        }
+      }
+    };
+
+    void checkRemoteUpdatedAt();
+    const intervalId = window.setInterval(() => {
+      void checkRemoteUpdatedAt();
+    }, REMOTE_CHECK_INTERVAL_MS);
+
+    const handleWindowFocus = () => {
+      void checkRemoteUpdatedAt();
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        void checkRemoteUpdatedAt();
+      }
+    };
+
+    window.addEventListener('focus', handleWindowFocus);
+    document.addEventListener('visibilitychange', handleVisibilityChange);
+
+    return () => {
+      cancelled = true;
+      window.clearInterval(intervalId);
+      window.removeEventListener('focus', handleWindowFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+    };
+  }, [isTripSyncAvailable, hasValidTripCode, normalizedTripCode, firebaseDatabase]);
 
   const activeDestination = destinations.find((destination) => destination.id === activeId);
 
@@ -372,6 +546,113 @@ function App() {
     }));
   };
 
+  const handleTripCodeChange = (value: string) => {
+    setTripCode(normalizeTripCode(value));
+    setSyncStatus({ kind: 'neutral', message: 'Use Pull to load, or Push to save local changes for this code.' });
+  };
+
+  const handlePullFromTrip = async () => {
+    if (!isTripSyncAvailable || !firebaseDatabase) {
+      setSyncStatus({ kind: 'error', message: 'Trip sync is not configured in this environment.' });
+      return;
+    }
+
+    if (!hasValidTripCode) {
+      setSyncStatus({ kind: 'warning', message: `Trip code must be at least ${TRIP_CODE_MIN_LENGTH} characters.` });
+      return;
+    }
+
+    setIsPulling(true);
+    try {
+      const snapshot = await get(ref(firebaseDatabase, `trips/${normalizedTripCode}`));
+      if (!snapshot.exists()) {
+        setLatestRemoteUpdatedAt(null);
+        setSyncStatus({ kind: 'warning', message: `No saved trip found for code ${normalizedTripCode}.` });
+        return;
+      }
+
+      const parsedPayload = parseTripSyncPayload(snapshot.val(), settings);
+      if (!parsedPayload) {
+        setSyncStatus({ kind: 'error', message: 'Trip data is invalid and could not be loaded.' });
+        return;
+      }
+
+      setDestinations(parsedPayload.destinations);
+      setSettings(parsedPayload.settings);
+      setActiveId(parsedPayload.destinations[0]?.id ?? null);
+
+      setLatestRemoteUpdatedAt(parsedPayload.remoteUpdatedAt);
+      setLastKnownRemoteByCode((previous) => ({
+        ...previous,
+        [normalizedTripCode]: parsedPayload.remoteUpdatedAt ?? 0
+      }));
+
+      setSyncStatus({
+        kind: 'success',
+        message: `Pulled ${parsedPayload.destinations.length} destination${parsedPayload.destinations.length === 1 ? '' : 's'} from ${normalizedTripCode}.`
+      });
+    } catch (error) {
+      console.error('Failed to pull trip data', error);
+      setSyncStatus({ kind: 'error', message: 'Failed to pull trip data. Please try again.' });
+    } finally {
+      setIsPulling(false);
+    }
+  };
+
+  const handlePushToTrip = async () => {
+    if (!isTripSyncAvailable || !firebaseDatabase) {
+      setSyncStatus({ kind: 'error', message: 'Trip sync is not configured in this environment.' });
+      return;
+    }
+
+    if (!hasValidTripCode) {
+      setSyncStatus({ kind: 'warning', message: `Trip code must be at least ${TRIP_CODE_MIN_LENGTH} characters.` });
+      return;
+    }
+
+    setIsPushing(true);
+    try {
+      const tripRef = ref(firebaseDatabase, `trips/${normalizedTripCode}`);
+      const currentRemoteSnapshot = await get(tripRef);
+      const remotePayload = currentRemoteSnapshot.exists() ? currentRemoteSnapshot.val() as TripSyncPayload : null;
+      const remoteUpdatedAt = parseTimestamp(remotePayload?.meta?.updatedAt);
+      const knownRemoteUpdatedAt = lastKnownRemoteByCode[normalizedTripCode] ?? 0;
+      setLatestRemoteUpdatedAt(remoteUpdatedAt);
+
+      if (remoteUpdatedAt !== null && remoteUpdatedAt > knownRemoteUpdatedAt) {
+        const shouldOverride = window.confirm(
+          'Remote changes were pushed after your last sync. Press OK to overwrite with local data, or Cancel to pull first.'
+        );
+        if (!shouldOverride) {
+          setSyncStatus({ kind: 'warning', message: 'Push canceled. Pull latest remote changes before pushing.' });
+          return;
+        }
+      }
+
+      const updatedAt = Date.now();
+      const payload: TripSyncPayload = {
+        destinations,
+        settings,
+        meta: {
+          updatedAt,
+          updatedBy: syncClientId
+        }
+      };
+
+      await set(tripRef, payload);
+
+      setLastKnownRemoteByCode((previous) => ({ ...previous, [normalizedTripCode]: updatedAt }));
+      setLastLocalPushByCode((previous) => ({ ...previous, [normalizedTripCode]: updatedAt }));
+      setLatestRemoteUpdatedAt(updatedAt);
+      setSyncStatus({ kind: 'success', message: `Pushed local plan to ${normalizedTripCode}.` });
+    } catch (error) {
+      console.error('Failed to push trip data', error);
+      setSyncStatus({ kind: 'error', message: 'Failed to push trip data. Please try again.' });
+    } finally {
+      setIsPushing(false);
+    }
+  };
+
   return (
     <div className="app-shell d-flex flex-column">
       <Navbar className="app-topbar flex-shrink-0 z-3 py-2">
@@ -417,13 +698,75 @@ function App() {
             </div>
 
             <div className="topbar-actions d-flex align-items-center justify-content-end gap-3 flex-wrap">
-              <section className="live-share-panel d-flex flex-column" aria-label="Live collaboration status">
-                <div className="d-flex align-items-center gap-2">
-                  <strong className="small">Trip Share</strong>
-                  <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle">Coming Soon</span>
+              <section className="live-share-panel d-flex flex-column" aria-label="Trip sync controls">
+                <div className="d-flex align-items-center gap-2 mb-1">
+                  <strong className="small">Trip Sync</strong>
+                  <span
+                    className={`badge border ${isTripSyncAvailable ? (hasRemoteChangesSinceLastSync ? 'bg-warning-subtle text-warning-emphasis border-warning-subtle' : 'bg-success-subtle text-success-emphasis border-success-subtle') : 'bg-secondary-subtle text-secondary-emphasis border-secondary-subtle'}`}
+                  >
+                    {isTripSyncAvailable ? (hasRemoteChangesSinceLastSync ? 'Updates' : 'Manual') : 'Unavailable'}
+                  </span>
                 </div>
-                <div className="inline-status warning" role="status" aria-live="polite">
-                  Live collaborative trip sharing is temporarily disabled while stability improvements are in progress.
+                <div className="trip-sync-controls">
+                  <Form.Control
+                    size="sm"
+                    value={tripCode}
+                    onChange={(e) => handleTripCodeChange(e.target.value)}
+                    placeholder="Trip code"
+                    aria-label="Trip code for manual sync"
+                    autoCapitalize="characters"
+                    autoCorrect="off"
+                    spellCheck={false}
+                  />
+                  <Button
+                    size="sm"
+                    variant="outline-secondary"
+                    onClick={handlePullFromTrip}
+                    disabled={!isTripSyncAvailable || !hasValidTripCode || isPulling || isPushing}
+                  >
+                    {isPulling ? <Spinner animation="border" size="sm" /> : 'Pull'}
+                  </Button>
+                  <Button
+                    size="sm"
+                    variant="outline-secondary"
+                    onClick={handlePushToTrip}
+                    disabled={!isTripSyncAvailable || !hasValidTripCode || isPulling || isPushing}
+                  >
+                    {isPushing ? <Spinner animation="border" size="sm" /> : 'Push'}
+                  </Button>
+                  <Dropdown align="end">
+                    <Dropdown.Toggle
+                      size="sm"
+                      variant="outline-secondary"
+                      id="trip-sync-details"
+                    >
+                      Details
+                    </Dropdown.Toggle>
+                    <Dropdown.Menu className="trip-sync-menu">
+                      <div className="trip-sync-menu-line">
+                        Last remote update: {formatTimestamp(latestRemoteUpdatedAt)}
+                      </div>
+                      <div className="trip-sync-menu-line">
+                        Last local push: {formatTimestamp(lastLocalPushAtForCode || null)}
+                      </div>
+                      <div className="trip-sync-menu-line">
+                        Last check: {formatTimestamp(lastRemoteCheckAt)}
+                      </div>
+                      {hasRemoteChangesSinceLastSync && (
+                        <div className="inline-status warning mt-2" role="status" aria-live="polite">
+                          Remote changes exist after your last sync. Pull first, or push to override.
+                        </div>
+                      )}
+                      {!isTripSyncAvailable && (
+                        <div className="inline-status warning mt-2" role="status" aria-live="polite">
+                          Firebase config missing, so trip sync is disabled.
+                        </div>
+                      )}
+                      <div className={`inline-status ${syncStatus.kind === 'neutral' ? '' : syncStatus.kind} mt-2`} role="status" aria-live="polite">
+                        {syncStatus.message}
+                      </div>
+                    </Dropdown.Menu>
+                  </Dropdown>
                 </div>
               </section>
 
