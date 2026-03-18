@@ -845,7 +845,7 @@ function App() {
                   />
                 </InputGroup>
 
-                <Button size="sm" variant="outline-secondary" onClick={() => setShowSearchLinksModal(true)} title="Search link settings">
+                <Button size="sm" variant="outline-secondary" onClick={() => setShowSearchLinksModal(true)} title="Search link settings" aria-label="Search link settings">
                   <FaCog />
                 </Button>
               </div>

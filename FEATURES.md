@@ -21,3 +21,4 @@ Track feature ideas for the Hackathon Planner. Add ideas below and Claude Code w
 - [x] Customizable search links - configure booking providers (label, URL template, type) via settings gear icon. Defaults: Google Flights, Ryanair, Booking.com, Airbnb
 - [x] Group by dates enabled by default in both flight and accommodation managers
 - [x] "Add another" scrolls to and focuses the quick-add form with dates pre-filled
+- [x] UI/UX review: responsive quick-add grid, touch-friendly action buttons, reduced-motion support, font preloading, aria-labels, removed duplicate Leaflet CSS, fixed mobile viewport units
