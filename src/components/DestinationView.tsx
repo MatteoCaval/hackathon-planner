@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Accommodation, BudgetAttempt, Destination, ExtraCost, Flight, PlannerSettings } from '../types';
+import { Accommodation, BudgetAttempt, Destination, ExtraCost, Flight, PlannerSettings, TripVotes } from '../types';
 import { DEFAULT_SEARCH_LINKS } from '../utils/bookingLinks';
 import MapComponent from './MapComponent';
 import FlightManager from './FlightManager';
@@ -13,6 +13,9 @@ interface Props {
   destination: Destination;
   settings: PlannerSettings;
   onUpdate: (destinationId: string, updater: (currentDestination: Destination) => Destination) => void;
+  votes: TripVotes;
+  currentPerson: string;
+  onToggleVote: (category: keyof TripVotes, entityId: string) => void;
 }
 
 type WorkspaceSection = 'overview' | 'flights' | 'accommodations' | 'budget';
@@ -35,7 +38,7 @@ const getCurrentHashSection = (): WorkspaceSection => {
   return isWorkspaceSection(hash) ? hash : DEFAULT_SECTION;
 };
 
-const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate }) => {
+const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate, votes, currentPerson, onToggleVote }) => {
   const [activeSection, setActiveSection] = useState<WorkspaceSection>(() => getCurrentHashSection());
 
   useEffect(() => {
@@ -427,6 +430,9 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate }) =
             onDraftChange={handleFlightDraftChange}
             destinationName={destination.name}
             searchLinks={settings.searchLinks || DEFAULT_SEARCH_LINKS}
+            votes={votes.flights}
+            currentPerson={currentPerson}
+            onToggleVote={(flightId) => onToggleVote('flights', flightId)}
           />
         </section>
       )}
@@ -440,6 +446,10 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate }) =
             onDraftChange={handleAccommodationDraftChange}
             destinationName={destination.name}
             searchLinks={settings.searchLinks || DEFAULT_SEARCH_LINKS}
+            peopleCount={settings.peopleCount}
+            votes={votes.accommodations}
+            currentPerson={currentPerson}
+            onToggleVote={(accId) => onToggleVote('accommodations', accId)}
           />
         </section>
       )}

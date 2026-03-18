@@ -19,6 +19,7 @@ import {
 import { getUrlAutofill } from '../utils/urlAutofill';
 import { formatCurrency } from '../utils/budget';
 import { getFlightSearchLinks } from '../utils/bookingLinks';
+import VoteButton from './VoteButton';
 
 interface Props {
   flights: Flight[];
@@ -27,6 +28,9 @@ interface Props {
   onDraftChange: (draft: Partial<Flight>) => void;
   destinationName: string;
   searchLinks: SearchLinkTemplate[];
+  votes: Record<string, string[]>;
+  currentPerson: string;
+  onToggleVote: (flightId: string) => void;
 }
 
 interface FlightGroup {
@@ -88,7 +92,10 @@ const FlightManager: React.FC<Props> = ({
   draft,
   onDraftChange,
   destinationName,
-  searchLinks
+  searchLinks,
+  votes,
+  currentPerson,
+  onToggleVote
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Flight>>({});
@@ -616,11 +623,12 @@ const FlightManager: React.FC<Props> = ({
                                   <Button size="sm" variant="outline-secondary" onClick={cancelEdit}>Cancel</Button>
                                 </div>
                               ) : (
-                                <>
-                                  <Button variant="link" className="text-secondary p-0 me-3" onClick={() => startEdit(flight)} aria-label="Edit flight option"><FaEdit /></Button>
-                                  <Button variant="link" className="text-secondary p-0 me-3" onClick={() => handleDuplicate(flight)} aria-label="Duplicate flight option"><FaClone /></Button>
+                                <div className="d-flex align-items-center gap-2 justify-content-end">
+                                  <VoteButton voters={votes[flight.id] || []} currentPerson={currentPerson} onToggle={() => onToggleVote(flight.id)} />
+                                  <Button variant="link" className="text-secondary p-0" onClick={() => startEdit(flight)} aria-label="Edit flight option"><FaEdit /></Button>
+                                  <Button variant="link" className="text-secondary p-0" onClick={() => handleDuplicate(flight)} aria-label="Duplicate flight option"><FaClone /></Button>
                                   <Button variant="link" className="text-danger p-0" onClick={() => handleRemove(flight.id)} aria-label="Remove flight option"><FaTrash /></Button>
-                                </>
+                                </div>
                               )}
                             </td>
                           </tr>
@@ -678,11 +686,12 @@ const FlightManager: React.FC<Props> = ({
                           <Button size="sm" variant="outline-secondary" onClick={cancelEdit}>Cancel</Button>
                         </div>
                       ) : (
-                        <>
-                          <Button variant="link" className="text-secondary p-0 me-3" onClick={() => startEdit(flight)} aria-label="Edit flight option"><FaEdit /></Button>
-                          <Button variant="link" className="text-secondary p-0 me-3" onClick={() => handleDuplicate(flight)} aria-label="Duplicate flight option"><FaClone /></Button>
+                        <div className="d-flex align-items-center gap-2 justify-content-end">
+                          <VoteButton voters={votes[flight.id] || []} currentPerson={currentPerson} onToggle={() => onToggleVote(flight.id)} />
+                          <Button variant="link" className="text-secondary p-0" onClick={() => startEdit(flight)} aria-label="Edit flight option"><FaEdit /></Button>
+                          <Button variant="link" className="text-secondary p-0" onClick={() => handleDuplicate(flight)} aria-label="Duplicate flight option"><FaClone /></Button>
                           <Button variant="link" className="text-danger p-0" onClick={() => handleRemove(flight.id)} aria-label="Remove flight option"><FaTrash /></Button>
-                        </>
+                        </div>
                       )}
                     </td>
                   </tr>

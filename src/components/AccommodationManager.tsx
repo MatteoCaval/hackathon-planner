@@ -19,6 +19,7 @@ import {
 import { getUrlAutofill } from '../utils/urlAutofill';
 import { formatCurrency } from '../utils/budget';
 import { getAccommodationSearchLinks } from '../utils/bookingLinks';
+import VoteButton from './VoteButton';
 
 interface Props {
   accommodations: Accommodation[];
@@ -27,6 +28,10 @@ interface Props {
   onDraftChange: (draft: Partial<Accommodation>) => void;
   destinationName: string;
   searchLinks: SearchLinkTemplate[];
+  peopleCount: number;
+  votes: Record<string, string[]>;
+  currentPerson: string;
+  onToggleVote: (accId: string) => void;
 }
 
 interface AccommodationGroup {
@@ -88,7 +93,11 @@ const AccommodationManager: React.FC<Props> = ({
   draft,
   onDraftChange,
   destinationName,
-  searchLinks
+  searchLinks,
+  peopleCount,
+  votes,
+  currentPerson,
+  onToggleVote
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Accommodation>>({});
@@ -368,11 +377,12 @@ const AccommodationManager: React.FC<Props> = ({
             <Button size="sm" variant="outline-secondary" onClick={cancelEdit}>Cancel</Button>
           </div>
         ) : (
-          <>
-            <Button variant="link" className="text-secondary p-0 me-3" onClick={() => startEdit(accommodation)} aria-label="Edit accommodation option"><FaEdit /></Button>
-            <Button variant="link" className="text-secondary p-0 me-3" onClick={() => handleDuplicate(accommodation)} aria-label="Duplicate accommodation option"><FaClone /></Button>
+          <div className="d-flex align-items-center gap-2 justify-content-end">
+            <VoteButton voters={votes[accommodation.id] || []} currentPerson={currentPerson} onToggle={() => onToggleVote(accommodation.id)} />
+            <Button variant="link" className="text-secondary p-0" onClick={() => startEdit(accommodation)} aria-label="Edit accommodation option"><FaEdit /></Button>
+            <Button variant="link" className="text-secondary p-0" onClick={() => handleDuplicate(accommodation)} aria-label="Duplicate accommodation option"><FaClone /></Button>
             <Button variant="link" className="text-danger p-0" onClick={() => handleRemove(accommodation.id)} aria-label="Remove accommodation option"><FaTrash /></Button>
-          </>
+          </div>
         )}
       </td>
     </tr>
@@ -547,7 +557,7 @@ const AccommodationManager: React.FC<Props> = ({
               {groupByDate ? (
                 <>
                   {accGroups.map((group) => {
-                    const groupSearchLinks = getAccommodationSearchLinks(searchLinks, destinationName, group.startDate, group.endDate);
+                    const groupSearchLinks = getAccommodationSearchLinks(searchLinks, destinationName, group.startDate, group.endDate, peopleCount);
                     return (
                       <React.Fragment key={group.key}>
                         <tr className="table-light">

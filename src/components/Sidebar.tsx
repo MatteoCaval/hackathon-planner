@@ -2,6 +2,7 @@ import React, { useMemo, useState } from 'react';
 import { Nav, Button, Form } from 'react-bootstrap';
 import { Destination } from '../types';
 import { FaMapMarkerAlt, FaPlus, FaTrash, FaSearch } from 'react-icons/fa';
+import VoteButton from './VoteButton';
 
 interface Props {
   destinations: Destination[];
@@ -9,9 +10,12 @@ interface Props {
   onSelect: (id: string) => void;
   onAddClick: () => void;
   onRemove: (id: string) => void;
+  votes: Record<string, string[]>;
+  currentPerson: string;
+  onToggleVote: (destId: string) => void;
 }
 
-const Sidebar: React.FC<Props> = ({ destinations, activeId, onSelect, onAddClick, onRemove }) => {
+const Sidebar: React.FC<Props> = ({ destinations, activeId, onSelect, onAddClick, onRemove, votes, currentPerson, onToggleVote }) => {
   const [searchQuery, setSearchQuery] = useState('');
 
   const filteredDestinations = useMemo(() => {
@@ -62,6 +66,11 @@ const Sidebar: React.FC<Props> = ({ destinations, activeId, onSelect, onAddClick
                   <FaMapMarkerAlt className="opacity-75" aria-hidden="true" />
                   <span className="flex-grow-1 text-truncate">{destination.name}</span>
                 </button>
+                <VoteButton
+                  voters={votes[destination.id] || []}
+                  currentPerson={currentPerson}
+                  onToggle={() => onToggleVote(destination.id)}
+                />
                 <button
                   type="button"
                   className="nav-item-remove"

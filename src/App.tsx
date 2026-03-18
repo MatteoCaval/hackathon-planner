@@ -7,8 +7,9 @@ import AddDestinationModal from './components/AddDestinationModal';
 import DataPersistence from './components/DataPersistence';
 import PersistentBudgetStatus from './components/PersistentBudgetStatus';
 import { useLocalStorage } from './useLocalStorage';
-import { Accommodation, BudgetAttempt, BudgetEstimatorState, Destination, ExtraCost, Flight, PlannerSettings, SearchLinkTemplate } from './types';
+import { Accommodation, BudgetAttempt, BudgetEstimatorState, Destination, ExtraCost, Flight, PlannerSettings, SearchLinkTemplate, TripVotes } from './types';
 import { DEFAULT_SEARCH_LINKS } from './utils/bookingLinks';
+import PersonSelector from './components/PersonSelector';
 import { FaCog, FaPlane, FaPlus, FaTrash, FaUsers, FaWallet } from 'react-icons/fa';
 import { firebaseDatabase, isFirebaseConfigured } from './firebase';
 import 'bootstrap/dist/css/bootstrap.min.css';
@@ -41,6 +42,8 @@ type LegacyDestination = Omit<Destination, 'notes' | 'extraCosts' | 'budgetEstim
 type TripSyncPayload = {
   destinations?: unknown;
   settings?: unknown;
+  tripMembers?: unknown;
+  votes?: unknown;
   meta?: {
     updatedAt?: unknown;
     updatedBy?: unknown;
@@ -475,7 +478,39 @@ const normalizeSettings = (candidate: unknown, fallback: PlannerSettings): Plann
   return { totalBudget, peopleCount, searchLinks };
 };
 
-const parseTripSyncPayload = (payload: unknown, fallbackSettings: PlannerSettings): { destinations: Destination[]; settings: PlannerSettings; remoteUpdatedAt: number | null } | null => {
+const DEFAULT_VOTES: TripVotes = { destinations: {}, flights: {}, accommodations: {} };
+
+const normalizeVoteRecord = (candidate: unknown): Record<string, string[]> => {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    return {};
+  }
+  const result: Record<string, string[]> = {};
+  for (const [key, value] of Object.entries(candidate as Record<string, unknown>)) {
+    if (Array.isArray(value)) {
+      result[key] = value.filter((v): v is string => typeof v === 'string');
+    }
+  }
+  return result;
+};
+
+const normalizeVotes = (candidate: unknown): TripVotes => {
+  if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
+    return DEFAULT_VOTES;
+  }
+  const typed = candidate as Record<string, unknown>;
+  return {
+    destinations: normalizeVoteRecord(typed.destinations),
+    flights: normalizeVoteRecord(typed.flights),
+    accommodations: normalizeVoteRecord(typed.accommodations),
+  };
+};
+
+const normalizeTripMembers = (candidate: unknown): string[] => {
+  if (!Array.isArray(candidate)) return [];
+  return candidate.filter((v): v is string => typeof v === 'string' && v.trim() !== '');
+};
+
+const parseTripSyncPayload = (payload: unknown, fallbackSettings: PlannerSettings): { destinations: Destination[]; settings: PlannerSettings; tripMembers: string[]; votes: TripVotes; remoteUpdatedAt: number | null } | null => {
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
     return null;
   }
@@ -496,6 +531,8 @@ const parseTripSyncPayload = (payload: unknown, fallbackSettings: PlannerSetting
   return {
     destinations,
     settings: normalizeSettings(typedPayload.settings, fallbackSettings),
+    tripMembers: normalizeTripMembers(typedPayload.tripMembers),
+    votes: normalizeVotes(typedPayload.votes),
     remoteUpdatedAt: parseTimestamp(typedPayload.meta?.updatedAt)
   };
 };
@@ -515,6 +552,9 @@ function App() {
   const [lastRemoteCheckAt, setLastRemoteCheckAt] = useState<number | null>(null);
   const [syncClientId] = useState(getOrCreateSyncClientId);
   const [showSearchLinksModal, setShowSearchLinksModal] = useState(false);
+  const [currentPerson, setCurrentPerson] = useLocalStorage<string>('hackathon-current-person', '');
+  const [tripMembers, setTripMembers] = useLocalStorage<string[]>('hackathon-trip-members', []);
+  const [votes, setVotes] = useLocalStorage<TripVotes>('hackathon-votes', DEFAULT_VOTES);
 
   const normalizedTripCode = normalizeTripCode(tripCode);
   const hasValidTripCode = normalizedTripCode.length >= TRIP_CODE_MIN_LENGTH;
@@ -556,6 +596,37 @@ function App() {
       setDestinations(destinations.map((destination) => normalizeDestination(destination as LegacyDestination)));
     }
   }, [destinations, setDestinations]);
+
+  useEffect(() => {
+    const validDestIds = new Set(destinations.map((d) => d.id));
+    const validFlightIds = new Set(destinations.flatMap((d) => d.flights.map((f) => f.id)));
+    const validAccIds = new Set(destinations.flatMap((d) => d.accommodations.map((a) => a.id)));
+
+    const prune = (record: Record<string, string[]>, validIds: Set<string>): Record<string, string[]> | null => {
+      const pruned: Record<string, string[]> = {};
+      let changed = false;
+      for (const [key, value] of Object.entries(record)) {
+        if (validIds.has(key)) {
+          pruned[key] = value;
+        } else {
+          changed = true;
+        }
+      }
+      return changed ? pruned : null;
+    };
+
+    const prunedDest = prune(votes.destinations, validDestIds);
+    const prunedFlights = prune(votes.flights, validFlightIds);
+    const prunedAcc = prune(votes.accommodations, validAccIds);
+
+    if (prunedDest || prunedFlights || prunedAcc) {
+      setVotes({
+        destinations: prunedDest ?? votes.destinations,
+        flights: prunedFlights ?? votes.flights,
+        accommodations: prunedAcc ?? votes.accommodations,
+      });
+    }
+  }, [destinations, votes, setVotes]);
 
   useEffect(() => {
     const database = firebaseDatabase;
@@ -696,6 +767,30 @@ function App() {
     }));
   };
 
+  const handleAddTripMember = (name: string) => {
+    const trimmed = name.trim();
+    if (!trimmed) return;
+    setTripMembers((prev) => prev.includes(trimmed) ? prev : [...prev, trimmed]);
+  };
+
+  const handleToggleVote = (category: keyof TripVotes, entityId: string) => {
+    if (!currentPerson) return;
+    setVotes((prev) => {
+      const current = prev[category][entityId] || [];
+      const hasVoted = current.includes(currentPerson);
+      const next = hasVoted
+        ? current.filter((name) => name !== currentPerson)
+        : [...current, currentPerson];
+      return {
+        ...prev,
+        [category]: {
+          ...prev[category],
+          [entityId]: next
+        }
+      };
+    });
+  };
+
   const handleTripCodeChange = (value: string) => {
     setTripCode(normalizeTripCode(value));
     setSyncStatus({ kind: 'neutral', message: 'Use Pull to load, or Push to save local changes for this code.' });
@@ -729,6 +824,8 @@ function App() {
 
       setDestinations(parsedPayload.destinations);
       setSettings(parsedPayload.settings);
+      setTripMembers(parsedPayload.tripMembers);
+      setVotes(parsedPayload.votes);
       setActiveId(parsedPayload.destinations[0]?.id ?? null);
 
       setLatestRemoteUpdatedAt(parsedPayload.remoteUpdatedAt);
@@ -783,6 +880,8 @@ function App() {
       const payload: TripSyncPayload = {
         destinations,
         settings,
+        tripMembers,
+        votes,
         meta: {
           updatedAt,
           updatedBy: syncClientId
@@ -844,6 +943,13 @@ function App() {
                     onChange={(e) => handlePeopleCountChange(e.target.value)}
                   />
                 </InputGroup>
+
+                <PersonSelector
+                  currentPerson={currentPerson}
+                  onPersonChange={setCurrentPerson}
+                  tripMembers={tripMembers}
+                  onAddMember={handleAddTripMember}
+                />
 
                 <Button size="sm" variant="outline-secondary" onClick={() => setShowSearchLinksModal(true)} title="Search link settings" aria-label="Search link settings">
                   <FaCog />
@@ -942,6 +1048,9 @@ function App() {
           onSelect={setActiveId}
           onAddClick={() => setShowAddModal(true)}
           onRemove={handleRemoveDestination}
+          votes={votes.destinations}
+          currentPerson={currentPerson}
+          onToggleVote={(destId) => handleToggleVote('destinations', destId)}
         />
 
         <div className="workspace-pane flex-grow-1 d-flex flex-column overflow-hidden">
@@ -953,6 +1062,9 @@ function App() {
                 destination={activeDestination}
                 onUpdate={handleUpdateDestination}
                 settings={settings}
+                votes={votes}
+                currentPerson={currentPerson}
+                onToggleVote={handleToggleVote}
               />
             ) : (
               <section className="empty-state" aria-label="No destination selected">
@@ -984,7 +1096,7 @@ function App() {
         </Modal.Header>
         <Modal.Body>
           <p className="text-muted small mb-3">
-            Customize the booking search links shown in grouped views. Use placeholders: <code>{'{destination}'}</code>, <code>{'{origin}'}</code>, <code>{'{startDate}'}</code>, <code>{'{endDate}'}</code>.
+            Customize the booking search links shown in grouped views. Use placeholders: <code>{'{destination}'}</code>, <code>{'{origin}'}</code>, <code>{'{startDate}'}</code>, <code>{'{endDate}'}</code>, <code>{'{people}'}</code>.
           </p>
           <Table size="sm" bordered>
             <thead>

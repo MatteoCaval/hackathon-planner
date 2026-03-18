@@ -70,4 +70,10 @@ export interface PlannerSettings {
   searchLinks: SearchLinkTemplate[];
 }
 
+export interface TripVotes {
+  destinations: Record<string, string[]>;
+  flights: Record<string, string[]>;
+  accommodations: Record<string, string[]>;
+}
+
 export const DUBLIN_COORDS: [number, number] = [53.3498, -6.2603];

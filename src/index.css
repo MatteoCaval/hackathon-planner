@@ -966,6 +966,48 @@ a:hover {
   }
 }
 
+/* Vote button */
+.vote-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--color-neutral-400);
+  border-radius: 6px;
+  background: transparent;
+  color: var(--color-neutral-600);
+  padding: 2px 8px;
+  font-size: var(--font-size-xs);
+  cursor: pointer;
+  transition: all 0.15s ease;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+.vote-btn:hover:not(:disabled) {
+  border-color: var(--color-brand-500);
+  color: var(--color-brand-500);
+}
+
+.vote-btn.active {
+  background: var(--color-brand-500);
+  border-color: var(--color-brand-500);
+  color: #fff;
+}
+
+.vote-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.vote-count {
+  font-weight: 600;
+}
+
+/* Person selector */
+.person-selector .dropdown-menu {
+  min-width: 200px;
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
