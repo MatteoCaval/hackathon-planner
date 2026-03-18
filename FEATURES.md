@@ -1,0 +1,23 @@
+# Feature Ideas
+
+Track feature ideas for the Hackathon Planner. Add ideas below and Claude Code will help expand and implement them.
+
+**Status legend:** `[ ]` planned · `[~]` in progress · `[x]` completed
+
+---
+
+## Ideas
+
+<!-- Add feature ideas here. Example:
+- [ ] **Dark mode** - Add a dark theme toggle to the navbar
+- [ ] **Multi-currency support** - Allow budgets in currencies other than EUR
+-->
+
+
+- [x] for flights optionally add the option of adding arrival and departure time
+- [x] for flight add the option to add start destination (Dublin by default)
+- [x] for both flights and accommodation I would like to be able to group by date range, so that I can then keep adding inside that group without having to repeat the dates every time
+- [x] I would like to be able to add easy link to jump in the booking page for that date range and accommodation (to make easier to search new places)
+- [x] Customizable search links - configure booking providers (label, URL template, type) via settings gear icon. Defaults: Google Flights, Ryanair, Booking.com, Airbnb
+- [x] Group by dates enabled by default in both flight and accommodation managers
+- [x] "Add another" scrolls to and focuses the quick-add form with dates pre-filled

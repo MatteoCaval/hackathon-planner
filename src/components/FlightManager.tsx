@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Table, Button, Form, Card, Modal, InputGroup, Row, Col, Badge } from 'react-bootstrap';
 import { v4 as uuidv4 } from 'uuid';
-import { Flight } from '../types';
+import { Flight, SearchLinkTemplate } from '../types';
 import {
   FaTrash,
   FaExternalLinkAlt,
@@ -12,16 +12,29 @@ import {
   FaClone,
   FaClipboard,
   FaListUl,
-  FaFilter
+  FaFilter,
+  FaLayerGroup,
+  FaSearch
 } from 'react-icons/fa';
 import { getUrlAutofill } from '../utils/urlAutofill';
 import { formatCurrency } from '../utils/budget';
+import { getFlightSearchLinks } from '../utils/bookingLinks';
 
 interface Props {
   flights: Flight[];
   onChange: (flights: Flight[]) => void;
   draft: Partial<Flight>;
   onDraftChange: (draft: Partial<Flight>) => void;
+  destinationName: string;
+  searchLinks: SearchLinkTemplate[];
+}
+
+interface FlightGroup {
+  key: string;
+  label: string;
+  startDate: string;
+  endDate: string;
+  flights: Flight[];
 }
 
 interface ParsedBulkFlight {
@@ -73,7 +86,9 @@ const FlightManager: React.FC<Props> = ({
   flights,
   onChange,
   draft,
-  onDraftChange
+  onDraftChange,
+  destinationName,
+  searchLinks
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Flight>>({});
@@ -84,6 +99,7 @@ const FlightManager: React.FC<Props> = ({
   const [maxPrice, setMaxPrice] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortBy>('price');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [groupByDate, setGroupByDate] = useState(true);
 
   const quickAddDescriptionRef = React.useRef<HTMLInputElement>(null);
   const quickAddEndDateRef = React.useRef<HTMLInputElement>(null);
@@ -142,6 +158,9 @@ const FlightManager: React.FC<Props> = ({
       description: draft.description || '',
       startDate: draft.startDate || '',
       endDate: draft.endDate || '',
+      departureTime: draft.departureTime || '',
+      arrivalTime: draft.arrivalTime || '',
+      origin: draft.origin || '',
       pricePerPerson: Number(draft.pricePerPerson)
     };
 
@@ -166,7 +185,7 @@ const FlightManager: React.FC<Props> = ({
       {
         ...flight,
         id: uuidv4(),
-        description: flight.description ? `${flight.description} (Copy)` : 'Flight Option (Copy)'
+        description: flight.description ? `${flight.description} (Copy)` : 'Flight Option (Copy)',
       }
     ]);
   };
@@ -242,7 +261,10 @@ const FlightManager: React.FC<Props> = ({
       pricePerPerson: row.pricePerPerson,
       link: row.link,
       startDate: row.startDate,
-      endDate: row.endDate
+      endDate: row.endDate,
+      departureTime: '',
+      arrivalTime: '',
+      origin: ''
     }));
 
     onChange([...flights, ...importedFlights]);
@@ -279,6 +301,40 @@ const FlightManager: React.FC<Props> = ({
       return (a.description || '').localeCompare(b.description || '') * direction;
     });
   }, [flights, maxPrice, searchQuery, sortBy, sortDirection]);
+
+  const flightGroups = useMemo((): FlightGroup[] => {
+    if (!groupByDate) return [];
+    const groupMap = new Map<string, Flight[]>();
+    for (const flight of displayedFlights) {
+      const key = `${flight.startDate || 'no-start'}|${flight.endDate || 'no-end'}`;
+      const existing = groupMap.get(key);
+      if (existing) {
+        existing.push(flight);
+      } else {
+        groupMap.set(key, [flight]);
+      }
+    }
+    return Array.from(groupMap.entries()).map(([key, groupFlights]) => {
+      const first = groupFlights[0];
+      const start = first.startDate || 'No start date';
+      const end = first.endDate || 'No end date';
+      return {
+        key,
+        label: `${start} to ${end}`,
+        startDate: first.startDate,
+        endDate: first.endDate,
+        flights: groupFlights
+      };
+    });
+  }, [displayedFlights, groupByDate]);
+
+  const prefillDraftFromGroup = (startDate: string, endDate: string) => {
+    onDraftChange({ ...draft, startDate, endDate });
+    setTimeout(() => {
+      quickAddDescriptionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      quickAddDescriptionRef.current?.focus();
+    }, 50);
+  };
 
   return (
     <>
@@ -334,6 +390,42 @@ const FlightManager: React.FC<Props> = ({
                 onChange={(e) => setDraftValue({ endDate: e.target.value })}
                 onKeyDown={handleQuickAddKeyDown}
                 aria-label="Flight end date"
+              />
+            </Form.Group>
+
+            <Form.Group>
+              <Form.Label className="small text-muted mb-1">Origin</Form.Label>
+              <Form.Control
+                size="sm"
+                placeholder="Dublin"
+                value={draft.origin || ''}
+                onChange={(e) => setDraftValue({ origin: e.target.value })}
+                onKeyDown={handleQuickAddKeyDown}
+                aria-label="Flight origin"
+              />
+            </Form.Group>
+
+            <Form.Group>
+              <Form.Label className="small text-muted mb-1">Departs</Form.Label>
+              <Form.Control
+                size="sm"
+                type="time"
+                value={draft.departureTime ?? '12:00'}
+                onChange={(e) => setDraftValue({ departureTime: e.target.value })}
+                onKeyDown={handleQuickAddKeyDown}
+                aria-label="Departure time"
+              />
+            </Form.Group>
+
+            <Form.Group>
+              <Form.Label className="small text-muted mb-1">Arrives</Form.Label>
+              <Form.Control
+                size="sm"
+                type="time"
+                value={draft.arrivalTime ?? '12:00'}
+                onChange={(e) => setDraftValue({ arrivalTime: e.target.value })}
+                onKeyDown={handleQuickAddKeyDown}
+                aria-label="Arrival time"
               />
             </Form.Group>
 
@@ -425,6 +517,16 @@ const FlightManager: React.FC<Props> = ({
                 </Form.Select>
               </Col>
             </Row>
+            <div className="mt-2">
+              <Button
+                size="sm"
+                variant={groupByDate ? 'primary' : 'outline-secondary'}
+                onClick={() => setGroupByDate(!groupByDate)}
+                className="d-inline-flex align-items-center gap-1"
+              >
+                <FaLayerGroup /> Group by dates
+              </Button>
+            </div>
           </div>
 
           <Table hover responsive className="mb-0 align-middle manager-table">
@@ -436,89 +538,156 @@ const FlightManager: React.FC<Props> = ({
               </tr>
             </thead>
             <tbody>
-              {displayedFlights.map((flight) => (
-                <tr key={flight.id}>
-                  <td>
-                    {editingId === flight.id ? (
-                      <div className="d-flex flex-column gap-2">
-                        <Form.Control
-                          size="sm"
-                          placeholder="Description"
-                          value={editForm.description || ''}
-                          onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                        />
-                        <div className="d-flex gap-2">
-                          <Form.Control
-                            size="sm"
-                            type="date"
-                            min={minDate}
-                            value={editForm.startDate || ''}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleStartDateChange(e, true, setEditForm, editForm)}
-                          />
-                          <Form.Control
-                            ref={editFlightEndDateRef}
-                            size="sm"
-                            type="date"
-                            value={editForm.endDate || ''}
-                            min={editForm.startDate || ''}
-                            onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })}
-                          />
+              {groupByDate ? (
+                <>
+                  {flightGroups.map((group) => {
+                    const groupSearchLinks = getFlightSearchLinks(
+                      searchLinks,
+                      group.flights[0]?.origin || '',
+                      destinationName,
+                      group.startDate,
+                      group.endDate
+                    );
+                    return (
+                      <React.Fragment key={group.key}>
+                        <tr className="table-light">
+                          <td colSpan={3}>
+                            <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 py-1">
+                              <div className="d-flex align-items-center gap-2">
+                                <strong>{group.label}</strong>
+                                <Badge bg="secondary" pill>{group.flights.length}</Badge>
+                              </div>
+                              <div className="d-flex gap-2">
+                                {groupSearchLinks.map((sl) => (
+                                  <a key={sl.label} href={sl.url} target="_blank" rel="noreferrer" className="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1">
+                                    <FaSearch size={10} /> {sl.label}
+                                  </a>
+                                ))}
+                                <Button size="sm" variant="outline-secondary" onClick={() => prefillDraftFromGroup(group.startDate, group.endDate)}>
+                                  <FaPlus className="me-1" /> Add another
+                                </Button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                        {group.flights.map((flight) => (
+                          <tr key={flight.id}>
+                            <td>
+                              {editingId === flight.id ? (
+                                <div className="d-flex flex-column gap-2">
+                                  <Form.Control size="sm" placeholder="Description" value={editForm.description || ''} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
+                                  <Form.Control size="sm" placeholder="Origin (e.g. Dublin)" value={editForm.origin || ''} onChange={(e) => setEditForm({ ...editForm, origin: e.target.value })} />
+                                  <div className="d-flex gap-2">
+                                    <Form.Control size="sm" type="date" min={minDate} value={editForm.startDate || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleStartDateChange(e, true, setEditForm, editForm)} />
+                                    <Form.Control size="sm" type="time" value={editForm.departureTime ?? '12:00'} onChange={(e) => setEditForm({ ...editForm, departureTime: e.target.value })} />
+                                  </div>
+                                  <div className="d-flex gap-2">
+                                    <Form.Control ref={editFlightEndDateRef} size="sm" type="date" value={editForm.endDate || ''} min={editForm.startDate || ''} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} />
+                                    <Form.Control size="sm" type="time" value={editForm.arrivalTime ?? '12:00'} onChange={(e) => setEditForm({ ...editForm, arrivalTime: e.target.value })} />
+                                  </div>
+                                  <Form.Control size="sm" placeholder="Link" value={editForm.link || ''} onChange={(e) => setEditForm({ ...editForm, link: e.target.value })} />
+                                </div>
+                              ) : (
+                                <>
+                                  <div className="fw-semibold">{flight.description || 'Flight Option'}</div>
+                                  {flight.origin && <div className="small subtle-text">From: {flight.origin}</div>}
+                                  <div className="small subtle-text my-1">
+                                    {flight.departureTime && `Departs ${flight.departureTime}`}
+                                    {flight.departureTime && flight.arrivalTime && ' · '}
+                                    {flight.arrivalTime && `Arrives ${flight.arrivalTime}`}
+                                  </div>
+                                  <a href={flight.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-inline-flex align-items-center gap-1">
+                                    View Deal <FaExternalLinkAlt size={10} />
+                                  </a>
+                                </>
+                              )}
+                            </td>
+                            <td style={{ verticalAlign: editingId === flight.id ? 'top' : 'middle' }}>
+                              {editingId === flight.id ? (
+                                <Form.Control size="sm" type="number" step="10" min="0" value={editForm.pricePerPerson} onChange={(e) => setEditForm({ ...editForm, pricePerPerson: Number(e.target.value) })} />
+                              ) : (
+                                <strong>{formatCurrency(flight.pricePerPerson)}</strong>
+                              )}
+                            </td>
+                            <td className="text-end" style={{ verticalAlign: editingId === flight.id ? 'top' : 'middle' }}>
+                              {editingId === flight.id ? (
+                                <div className="d-flex gap-2 justify-content-end">
+                                  <Button size="sm" variant="success" onClick={saveEdit} aria-label="Save flight changes"><FaSave /></Button>
+                                  <Button size="sm" variant="outline-secondary" onClick={cancelEdit}>Cancel</Button>
+                                </div>
+                              ) : (
+                                <>
+                                  <Button variant="link" className="text-secondary p-0 me-3" onClick={() => startEdit(flight)} aria-label="Edit flight option"><FaEdit /></Button>
+                                  <Button variant="link" className="text-secondary p-0 me-3" onClick={() => handleDuplicate(flight)} aria-label="Duplicate flight option"><FaClone /></Button>
+                                  <Button variant="link" className="text-danger p-0" onClick={() => handleRemove(flight.id)} aria-label="Remove flight option"><FaTrash /></Button>
+                                </>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </React.Fragment>
+                    );
+                  })}
+                </>
+              ) : (
+                displayedFlights.map((flight) => (
+                  <tr key={flight.id}>
+                    <td>
+                      {editingId === flight.id ? (
+                        <div className="d-flex flex-column gap-2">
+                          <Form.Control size="sm" placeholder="Description" value={editForm.description || ''} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
+                          <Form.Control size="sm" placeholder="Origin (e.g. Dublin)" value={editForm.origin || ''} onChange={(e) => setEditForm({ ...editForm, origin: e.target.value })} />
+                          <div className="d-flex gap-2">
+                            <Form.Control size="sm" type="date" min={minDate} value={editForm.startDate || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleStartDateChange(e, true, setEditForm, editForm)} />
+                            <Form.Control size="sm" type="time" value={editForm.departureTime ?? '12:00'} onChange={(e) => setEditForm({ ...editForm, departureTime: e.target.value })} />
+                          </div>
+                          <div className="d-flex gap-2">
+                            <Form.Control ref={editFlightEndDateRef} size="sm" type="date" value={editForm.endDate || ''} min={editForm.startDate || ''} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} />
+                            <Form.Control size="sm" type="time" value={editForm.arrivalTime ?? '12:00'} onChange={(e) => setEditForm({ ...editForm, arrivalTime: e.target.value })} />
+                          </div>
+                          <Form.Control size="sm" placeholder="Link" value={editForm.link || ''} onChange={(e) => setEditForm({ ...editForm, link: e.target.value })} />
                         </div>
-                        <Form.Control
-                          size="sm"
-                          placeholder="Link"
-                          value={editForm.link || ''}
-                          onChange={(e) => setEditForm({ ...editForm, link: e.target.value })}
-                        />
-                      </div>
-                    ) : (
-                      <>
-                        <div className="fw-semibold">{flight.description || 'Flight Option'}</div>
-                        <div className="small subtle-text my-1">
-                          {flight.startDate || 'No start date'} <span className="mx-1">to</span> {flight.endDate || 'No end date'}
+                      ) : (
+                        <>
+                          <div className="fw-semibold">{flight.description || 'Flight Option'}</div>
+                          {flight.origin && <div className="small subtle-text">From: {flight.origin}</div>}
+                          <div className="small subtle-text my-1">
+                            {flight.startDate || 'No start date'}
+                            {flight.departureTime && ` ${flight.departureTime}`}
+                            <span className="mx-1">to</span>
+                            {flight.endDate || 'No end date'}
+                            {flight.arrivalTime && ` ${flight.arrivalTime}`}
+                          </div>
+                          <a href={flight.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-inline-flex align-items-center gap-1">
+                            View Deal <FaExternalLinkAlt size={10} />
+                          </a>
+                        </>
+                      )}
+                    </td>
+                    <td style={{ verticalAlign: editingId === flight.id ? 'top' : 'middle' }}>
+                      {editingId === flight.id ? (
+                        <Form.Control size="sm" type="number" step="10" min="0" value={editForm.pricePerPerson} onChange={(e) => setEditForm({ ...editForm, pricePerPerson: Number(e.target.value) })} />
+                      ) : (
+                        <strong>{formatCurrency(flight.pricePerPerson)}</strong>
+                      )}
+                    </td>
+                    <td className="text-end" style={{ verticalAlign: editingId === flight.id ? 'top' : 'middle' }}>
+                      {editingId === flight.id ? (
+                        <div className="d-flex gap-2 justify-content-end">
+                          <Button size="sm" variant="success" onClick={saveEdit} aria-label="Save flight changes"><FaSave /></Button>
+                          <Button size="sm" variant="outline-secondary" onClick={cancelEdit}>Cancel</Button>
                         </div>
-                        <a href={flight.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-inline-flex align-items-center gap-1">
-                          View Deal <FaExternalLinkAlt size={10} />
-                        </a>
-                      </>
-                    )}
-                  </td>
-                  <td style={{ verticalAlign: editingId === flight.id ? 'top' : 'middle' }}>
-                    {editingId === flight.id ? (
-                      <Form.Control
-                        size="sm"
-                        type="number"
-                        step="10"
-                        min="0"
-                        value={editForm.pricePerPerson}
-                        onChange={(e) => setEditForm({ ...editForm, pricePerPerson: Number(e.target.value) })}
-                      />
-                    ) : (
-                      <strong>{formatCurrency(flight.pricePerPerson)}</strong>
-                    )}
-                  </td>
-                  <td className="text-end" style={{ verticalAlign: editingId === flight.id ? 'top' : 'middle' }}>
-                    {editingId === flight.id ? (
-                      <div className="d-flex gap-2 justify-content-end">
-                        <Button size="sm" variant="success" onClick={saveEdit} aria-label="Save flight changes"><FaSave /></Button>
-                        <Button size="sm" variant="outline-secondary" onClick={cancelEdit}>Cancel</Button>
-                      </div>
-                    ) : (
-                      <>
-                        <Button variant="link" className="text-secondary p-0 me-3" onClick={() => startEdit(flight)} aria-label="Edit flight option">
-                          <FaEdit />
-                        </Button>
-                        <Button variant="link" className="text-secondary p-0 me-3" onClick={() => handleDuplicate(flight)} aria-label="Duplicate flight option">
-                          <FaClone />
-                        </Button>
-                        <Button variant="link" className="text-danger p-0" onClick={() => handleRemove(flight.id)} aria-label="Remove flight option">
-                          <FaTrash />
-                        </Button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                      ) : (
+                        <>
+                          <Button variant="link" className="text-secondary p-0 me-3" onClick={() => startEdit(flight)} aria-label="Edit flight option"><FaEdit /></Button>
+                          <Button variant="link" className="text-secondary p-0 me-3" onClick={() => handleDuplicate(flight)} aria-label="Duplicate flight option"><FaClone /></Button>
+                          <Button variant="link" className="text-danger p-0" onClick={() => handleRemove(flight.id)} aria-label="Remove flight option"><FaTrash /></Button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
 
               {displayedFlights.length === 0 && (
                 <tr>

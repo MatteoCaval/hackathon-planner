@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Accommodation, BudgetAttempt, Destination, ExtraCost, Flight, PlannerSettings } from '../types';
+import { DEFAULT_SEARCH_LINKS } from '../utils/bookingLinks';
 import MapComponent from './MapComponent';
 import FlightManager from './FlightManager';
 import AccommodationManager from './AccommodationManager';
@@ -424,6 +425,8 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate }) =
             onChange={handleFlightsChange}
             draft={destination.flightDraft}
             onDraftChange={handleFlightDraftChange}
+            destinationName={destination.name}
+            searchLinks={settings.searchLinks || DEFAULT_SEARCH_LINKS}
           />
         </section>
       )}
@@ -435,6 +438,8 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate }) =
             onChange={handleAccChange}
             draft={destination.accommodationDraft}
             onDraftChange={handleAccommodationDraftChange}
+            destinationName={destination.name}
+            searchLinks={settings.searchLinks || DEFAULT_SEARCH_LINKS}
           />
         </section>
       )}

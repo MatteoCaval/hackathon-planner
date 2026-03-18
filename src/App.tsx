@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Button, Container, Dropdown, Form, InputGroup, Navbar, Spinner } from 'react-bootstrap';
+import { Button, Container, Dropdown, Form, InputGroup, Modal, Navbar, Spinner, Table } from 'react-bootstrap';
 import { get, ref, set } from 'firebase/database';
 import Sidebar from './components/Sidebar';
 import DestinationView from './components/DestinationView';
@@ -7,8 +7,9 @@ import AddDestinationModal from './components/AddDestinationModal';
 import DataPersistence from './components/DataPersistence';
 import PersistentBudgetStatus from './components/PersistentBudgetStatus';
 import { useLocalStorage } from './useLocalStorage';
-import { Accommodation, BudgetAttempt, BudgetEstimatorState, Destination, ExtraCost, Flight, PlannerSettings } from './types';
-import { FaPlane, FaPlus, FaUsers, FaWallet } from 'react-icons/fa';
+import { Accommodation, BudgetAttempt, BudgetEstimatorState, Destination, ExtraCost, Flight, PlannerSettings, SearchLinkTemplate } from './types';
+import { DEFAULT_SEARCH_LINKS } from './utils/bookingLinks';
+import { FaCog, FaPlane, FaPlus, FaTrash, FaUsers, FaWallet } from 'react-icons/fa';
 import { firebaseDatabase, isFirebaseConfigured } from './firebase';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'leaflet/dist/leaflet.css';
@@ -48,7 +49,7 @@ type TripSyncPayload = {
 type SyncStatusKind = 'neutral' | 'success' | 'warning' | 'error';
 type SyncStatus = { kind: SyncStatusKind; message: string };
 
-const DEFAULT_SETTINGS: PlannerSettings = { totalBudget: 5000, peopleCount: 5 };
+const DEFAULT_SETTINGS: PlannerSettings = { totalBudget: 5000, peopleCount: 5, searchLinks: DEFAULT_SEARCH_LINKS };
 const TRIP_CODE_MIN_LENGTH = 4;
 const TRIP_CODE_MAX_LENGTH = 12;
 const REMOTE_CHECK_INTERVAL_MS = 15000;
@@ -258,6 +259,9 @@ const normalizeFlightDraft = (flightDraft: unknown): Partial<Flight> => {
   if (typeof typedDraft.description === 'string') normalizedDraft.description = typedDraft.description;
   if (typeof typedDraft.startDate === 'string') normalizedDraft.startDate = typedDraft.startDate;
   if (typeof typedDraft.endDate === 'string') normalizedDraft.endDate = typedDraft.endDate;
+  if (typeof typedDraft.departureTime === 'string') normalizedDraft.departureTime = typedDraft.departureTime;
+  if (typeof typedDraft.arrivalTime === 'string') normalizedDraft.arrivalTime = typedDraft.arrivalTime;
+  if (typeof typedDraft.origin === 'string') normalizedDraft.origin = typedDraft.origin;
   if (typeof typedDraft.pricePerPerson === 'number' && Number.isFinite(typedDraft.pricePerPerson) && typedDraft.pricePerPerson >= 0) {
     normalizedDraft.pricePerPerson = typedDraft.pricePerPerson;
   }
@@ -294,7 +298,7 @@ const hasInvalidFlightDraft = (flightDraft: unknown): boolean => {
     if (key === 'pricePerPerson') {
       return typeof value !== 'number' || !Number.isFinite(value) || value < 0;
     }
-    if (key === 'link' || key === 'description' || key === 'startDate' || key === 'endDate') {
+    if (key === 'link' || key === 'description' || key === 'startDate' || key === 'endDate' || key === 'departureTime' || key === 'arrivalTime' || key === 'origin') {
       return typeof value !== 'string';
     }
     return true;
@@ -363,6 +367,9 @@ const normalizeFlightList = (flights: unknown): Flight[] => {
         description: typeof typedFlight.description === 'string' ? typedFlight.description : '',
         startDate: typeof typedFlight.startDate === 'string' ? typedFlight.startDate : '',
         endDate: typeof typedFlight.endDate === 'string' ? typedFlight.endDate : '',
+        departureTime: typeof typedFlight.departureTime === 'string' ? typedFlight.departureTime : '',
+        arrivalTime: typeof typedFlight.arrivalTime === 'string' ? typedFlight.arrivalTime : '',
+        origin: typeof typedFlight.origin === 'string' ? typedFlight.origin : '',
         pricePerPerson: parsedPrice !== null && parsedPrice >= 0 ? parsedPrice : 0
       };
     })
@@ -431,6 +438,25 @@ const normalizeDestinationCandidate = (candidate: unknown): Destination | null =
   return normalizeDestination(legacyDestination);
 };
 
+const normalizeSearchLinks = (candidate: unknown, fallback: SearchLinkTemplate[]): SearchLinkTemplate[] => {
+  if (!Array.isArray(candidate)) {
+    return fallback;
+  }
+
+  const normalized = candidate
+    .filter((item): item is Record<string, unknown> => item && typeof item === 'object' && !Array.isArray(item))
+    .filter((item) => typeof item.id === 'string' && typeof item.label === 'string' && typeof item.urlTemplate === 'string' && (item.type === 'flight' || item.type === 'accommodation'))
+    .map((item) => ({
+      id: item.id as string,
+      label: item.label as string,
+      urlTemplate: item.urlTemplate as string,
+      type: item.type as 'flight' | 'accommodation',
+      enabled: typeof item.enabled === 'boolean' ? item.enabled : true
+    }));
+
+  return normalized.length > 0 ? normalized : fallback;
+};
+
 const normalizeSettings = (candidate: unknown, fallback: PlannerSettings): PlannerSettings => {
   if (!candidate || typeof candidate !== 'object' || Array.isArray(candidate)) {
     return fallback;
@@ -444,7 +470,9 @@ const normalizeSettings = (candidate: unknown, fallback: PlannerSettings): Plann
     ? Math.floor(parsed.peopleCount)
     : fallback.peopleCount;
 
-  return { totalBudget, peopleCount };
+  const searchLinks = normalizeSearchLinks(parsed.searchLinks, fallback.searchLinks);
+
+  return { totalBudget, peopleCount, searchLinks };
 };
 
 const parseTripSyncPayload = (payload: unknown, fallbackSettings: PlannerSettings): { destinations: Destination[]; settings: PlannerSettings; remoteUpdatedAt: number | null } | null => {
@@ -486,6 +514,7 @@ function App() {
   const [latestRemoteUpdatedAt, setLatestRemoteUpdatedAt] = useState<number | null>(null);
   const [lastRemoteCheckAt, setLastRemoteCheckAt] = useState<number | null>(null);
   const [syncClientId] = useState(getOrCreateSyncClientId);
+  const [showSearchLinksModal, setShowSearchLinksModal] = useState(false);
 
   const normalizedTripCode = normalizeTripCode(tripCode);
   const hasValidTripCode = normalizedTripCode.length >= TRIP_CODE_MIN_LENGTH;
@@ -629,6 +658,41 @@ function App() {
     setSettings((previousSettings) => ({
       ...previousSettings,
       peopleCount: Number.isFinite(parsed) && parsed > 0 ? Math.floor(parsed) : 1
+    }));
+  };
+
+  const handleSearchLinkUpdate = (id: string, updates: Partial<SearchLinkTemplate>) => {
+    setSettings((prev) => ({
+      ...prev,
+      searchLinks: prev.searchLinks.map((link) => link.id === id ? { ...link, ...updates } : link)
+    }));
+  };
+
+  const handleSearchLinkAdd = () => {
+    const newLink: SearchLinkTemplate = {
+      id: `custom-${Date.now()}`,
+      label: 'New Link',
+      urlTemplate: 'https://example.com?q={destination}&from={startDate}&to={endDate}',
+      type: 'flight',
+      enabled: true
+    };
+    setSettings((prev) => ({
+      ...prev,
+      searchLinks: [...prev.searchLinks, newLink]
+    }));
+  };
+
+  const handleSearchLinkRemove = (id: string) => {
+    setSettings((prev) => ({
+      ...prev,
+      searchLinks: prev.searchLinks.filter((link) => link.id !== id)
+    }));
+  };
+
+  const handleSearchLinksReset = () => {
+    setSettings((prev) => ({
+      ...prev,
+      searchLinks: DEFAULT_SEARCH_LINKS
     }));
   };
 
@@ -780,6 +844,10 @@ function App() {
                     onChange={(e) => handlePeopleCountChange(e.target.value)}
                   />
                 </InputGroup>
+
+                <Button size="sm" variant="outline-secondary" onClick={() => setShowSearchLinksModal(true)} title="Search link settings">
+                  <FaCog />
+                </Button>
               </div>
             </div>
 
@@ -909,6 +977,79 @@ function App() {
         onHide={() => setShowAddModal(false)}
         onAdd={handleAddDestination}
       />
+
+      <Modal show={showSearchLinksModal} onHide={() => setShowSearchLinksModal(false)} size="lg" centered>
+        <Modal.Header closeButton>
+          <Modal.Title>Search Link Settings</Modal.Title>
+        </Modal.Header>
+        <Modal.Body>
+          <p className="text-muted small mb-3">
+            Customize the booking search links shown in grouped views. Use placeholders: <code>{'{destination}'}</code>, <code>{'{origin}'}</code>, <code>{'{startDate}'}</code>, <code>{'{endDate}'}</code>.
+          </p>
+          <Table size="sm" bordered>
+            <thead>
+              <tr>
+                <th style={{ width: '40px' }}>On</th>
+                <th style={{ width: '120px' }}>Label</th>
+                <th style={{ width: '100px' }}>Type</th>
+                <th>URL Template</th>
+                <th style={{ width: '40px' }} />
+              </tr>
+            </thead>
+            <tbody>
+              {(settings.searchLinks || DEFAULT_SEARCH_LINKS).map((link) => (
+                <tr key={link.id}>
+                  <td className="text-center align-middle">
+                    <Form.Check
+                      type="switch"
+                      checked={link.enabled}
+                      onChange={(e) => handleSearchLinkUpdate(link.id, { enabled: e.target.checked })}
+                      aria-label={`Toggle ${link.label}`}
+                    />
+                  </td>
+                  <td>
+                    <Form.Control
+                      size="sm"
+                      value={link.label}
+                      onChange={(e) => handleSearchLinkUpdate(link.id, { label: e.target.value })}
+                    />
+                  </td>
+                  <td>
+                    <Form.Select
+                      size="sm"
+                      value={link.type}
+                      onChange={(e) => handleSearchLinkUpdate(link.id, { type: e.target.value as 'flight' | 'accommodation' })}
+                    >
+                      <option value="flight">Flight</option>
+                      <option value="accommodation">Stay</option>
+                    </Form.Select>
+                  </td>
+                  <td>
+                    <Form.Control
+                      size="sm"
+                      value={link.urlTemplate}
+                      onChange={(e) => handleSearchLinkUpdate(link.id, { urlTemplate: e.target.value })}
+                    />
+                  </td>
+                  <td className="text-center align-middle">
+                    <Button variant="link" className="text-danger p-0" onClick={() => handleSearchLinkRemove(link.id)} aria-label={`Remove ${link.label}`}>
+                      <FaTrash />
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </Table>
+          <div className="d-flex gap-2">
+            <Button size="sm" variant="outline-primary" onClick={handleSearchLinkAdd}>
+              <FaPlus className="me-1" /> Add Link
+            </Button>
+            <Button size="sm" variant="outline-secondary" onClick={handleSearchLinksReset}>
+              Reset to Defaults
+            </Button>
+          </div>
+        </Modal.Body>
+      </Modal>
     </div>
   );
 }

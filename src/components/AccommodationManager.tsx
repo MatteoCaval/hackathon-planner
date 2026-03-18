@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Table, Button, Form, Card, Modal, InputGroup, Row, Col, Badge } from 'react-bootstrap';
 import { v4 as uuidv4 } from 'uuid';
-import { Accommodation } from '../types';
+import { Accommodation, SearchLinkTemplate } from '../types';
 import {
   FaTrash,
   FaEdit,
@@ -12,16 +12,29 @@ import {
   FaClone,
   FaClipboard,
   FaListUl,
-  FaFilter
+  FaFilter,
+  FaLayerGroup,
+  FaSearch
 } from 'react-icons/fa';
 import { getUrlAutofill } from '../utils/urlAutofill';
 import { formatCurrency } from '../utils/budget';
+import { getAccommodationSearchLinks } from '../utils/bookingLinks';
 
 interface Props {
   accommodations: Accommodation[];
   onChange: (acc: Accommodation[]) => void;
   draft: Partial<Accommodation>;
   onDraftChange: (draft: Partial<Accommodation>) => void;
+  destinationName: string;
+  searchLinks: SearchLinkTemplate[];
+}
+
+interface AccommodationGroup {
+  key: string;
+  label: string;
+  startDate: string;
+  endDate: string;
+  accommodations: Accommodation[];
 }
 
 interface ParsedBulkAccommodation {
@@ -73,7 +86,9 @@ const AccommodationManager: React.FC<Props> = ({
   accommodations,
   onChange,
   draft,
-  onDraftChange
+  onDraftChange,
+  destinationName,
+  searchLinks
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Accommodation>>({});
@@ -84,6 +99,7 @@ const AccommodationManager: React.FC<Props> = ({
   const [maxPrice, setMaxPrice] = useState<string>('');
   const [sortBy, setSortBy] = useState<SortBy>('price');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
+  const [groupByDate, setGroupByDate] = useState(true);
 
   const quickAddDescriptionRef = React.useRef<HTMLInputElement>(null);
   const quickAddEndDateRef = React.useRef<HTMLInputElement>(null);
@@ -280,6 +296,88 @@ const AccommodationManager: React.FC<Props> = ({
     });
   }, [accommodations, maxPrice, searchQuery, sortBy, sortDirection]);
 
+  const accGroups = useMemo((): AccommodationGroup[] => {
+    if (!groupByDate) return [];
+    const groupMap = new Map<string, Accommodation[]>();
+    for (const acc of displayedAccommodations) {
+      const key = `${acc.startDate || 'no-start'}|${acc.endDate || 'no-end'}`;
+      const existing = groupMap.get(key);
+      if (existing) {
+        existing.push(acc);
+      } else {
+        groupMap.set(key, [acc]);
+      }
+    }
+    return Array.from(groupMap.entries()).map(([key, groupAccs]) => {
+      const first = groupAccs[0];
+      const start = first.startDate || 'No start date';
+      const end = first.endDate || 'No end date';
+      return {
+        key,
+        label: `${start} to ${end}`,
+        startDate: first.startDate,
+        endDate: first.endDate,
+        accommodations: groupAccs
+      };
+    });
+  }, [displayedAccommodations, groupByDate]);
+
+  const prefillDraftFromGroup = (startDate: string, endDate: string) => {
+    onDraftChange({ ...draft, startDate, endDate });
+    setTimeout(() => {
+      quickAddDescriptionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      quickAddDescriptionRef.current?.focus();
+    }, 50);
+  };
+
+  const renderAccRow = (accommodation: Accommodation) => (
+    <tr key={accommodation.id}>
+      <td>
+        {editingId === accommodation.id ? (
+          <div className="d-flex flex-column gap-2">
+            <Form.Control size="sm" placeholder="Description" value={editForm.description || ''} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
+            <div className="d-flex gap-2">
+              <Form.Control size="sm" type="date" min={minDate} value={editForm.startDate || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleStartDateChange(e, true, setEditForm, editForm)} />
+              <Form.Control ref={editAccEndDateRef} size="sm" type="date" value={editForm.endDate || ''} min={editForm.startDate || ''} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} />
+            </div>
+            <Form.Control size="sm" placeholder="Link" value={editForm.link || ''} onChange={(e) => setEditForm({ ...editForm, link: e.target.value })} />
+          </div>
+        ) : (
+          <>
+            <div className="fw-semibold">{accommodation.description || 'Accommodation Option'}</div>
+            <div className="small subtle-text my-1">
+              {accommodation.startDate || 'No start date'} <span className="mx-1">to</span> {accommodation.endDate || 'No end date'}
+            </div>
+            <a href={accommodation.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-inline-flex align-items-center gap-1">
+              View Stay <FaExternalLinkAlt size={10} />
+            </a>
+          </>
+        )}
+      </td>
+      <td style={{ verticalAlign: editingId === accommodation.id ? 'top' : 'middle' }}>
+        {editingId === accommodation.id ? (
+          <Form.Control size="sm" type="number" step="10" min="0" value={editForm.totalPrice} onChange={(e) => setEditForm({ ...editForm, totalPrice: Number(e.target.value) })} />
+        ) : (
+          <strong>{formatCurrency(accommodation.totalPrice)}</strong>
+        )}
+      </td>
+      <td className="text-end" style={{ verticalAlign: editingId === accommodation.id ? 'top' : 'middle' }}>
+        {editingId === accommodation.id ? (
+          <div className="d-flex gap-2 justify-content-end">
+            <Button size="sm" variant="success" onClick={saveEdit} aria-label="Save accommodation changes"><FaSave /></Button>
+            <Button size="sm" variant="outline-secondary" onClick={cancelEdit}>Cancel</Button>
+          </div>
+        ) : (
+          <>
+            <Button variant="link" className="text-secondary p-0 me-3" onClick={() => startEdit(accommodation)} aria-label="Edit accommodation option"><FaEdit /></Button>
+            <Button variant="link" className="text-secondary p-0 me-3" onClick={() => handleDuplicate(accommodation)} aria-label="Duplicate accommodation option"><FaClone /></Button>
+            <Button variant="link" className="text-danger p-0" onClick={() => handleRemove(accommodation.id)} aria-label="Remove accommodation option"><FaTrash /></Button>
+          </>
+        )}
+      </td>
+    </tr>
+  );
+
   return (
     <>
       <Card className="workspace-card manager-card">
@@ -425,6 +523,16 @@ const AccommodationManager: React.FC<Props> = ({
                 </Form.Select>
               </Col>
             </Row>
+            <div className="mt-2">
+              <Button
+                size="sm"
+                variant={groupByDate ? 'primary' : 'outline-secondary'}
+                onClick={() => setGroupByDate(!groupByDate)}
+                className="d-inline-flex align-items-center gap-1"
+              >
+                <FaLayerGroup /> Group by dates
+              </Button>
+            </div>
           </div>
 
           <Table hover responsive className="mb-0 align-middle manager-table">
@@ -436,89 +544,40 @@ const AccommodationManager: React.FC<Props> = ({
               </tr>
             </thead>
             <tbody>
-              {displayedAccommodations.map((accommodation) => (
-                <tr key={accommodation.id}>
-                  <td>
-                    {editingId === accommodation.id ? (
-                      <div className="d-flex flex-column gap-2">
-                        <Form.Control
-                          size="sm"
-                          placeholder="Description"
-                          value={editForm.description || ''}
-                          onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
-                        />
-                        <div className="d-flex gap-2">
-                          <Form.Control
-                            size="sm"
-                            type="date"
-                            min={minDate}
-                            value={editForm.startDate || ''}
-                            onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleStartDateChange(e, true, setEditForm, editForm)}
-                          />
-                          <Form.Control
-                            ref={editAccEndDateRef}
-                            size="sm"
-                            type="date"
-                            value={editForm.endDate || ''}
-                            min={editForm.startDate || ''}
-                            onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })}
-                          />
-                        </div>
-                        <Form.Control
-                          size="sm"
-                          placeholder="Link"
-                          value={editForm.link || ''}
-                          onChange={(e) => setEditForm({ ...editForm, link: e.target.value })}
-                        />
-                      </div>
-                    ) : (
-                      <>
-                        <div className="fw-semibold">{accommodation.description || 'Accommodation Option'}</div>
-                        <div className="small subtle-text my-1">
-                          {accommodation.startDate || 'No start date'} <span className="mx-1">to</span> {accommodation.endDate || 'No end date'}
-                        </div>
-                        <a href={accommodation.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-inline-flex align-items-center gap-1">
-                          View Stay <FaExternalLinkAlt size={10} />
-                        </a>
-                      </>
-                    )}
-                  </td>
-                  <td style={{ verticalAlign: editingId === accommodation.id ? 'top' : 'middle' }}>
-                    {editingId === accommodation.id ? (
-                      <Form.Control
-                        size="sm"
-                        type="number"
-                        step="10"
-                        min="0"
-                        value={editForm.totalPrice}
-                        onChange={(e) => setEditForm({ ...editForm, totalPrice: Number(e.target.value) })}
-                      />
-                    ) : (
-                      <strong>{formatCurrency(accommodation.totalPrice)}</strong>
-                    )}
-                  </td>
-                  <td className="text-end" style={{ verticalAlign: editingId === accommodation.id ? 'top' : 'middle' }}>
-                    {editingId === accommodation.id ? (
-                      <div className="d-flex gap-2 justify-content-end">
-                        <Button size="sm" variant="success" onClick={saveEdit} aria-label="Save accommodation changes"><FaSave /></Button>
-                        <Button size="sm" variant="outline-secondary" onClick={cancelEdit}>Cancel</Button>
-                      </div>
-                    ) : (
-                      <>
-                        <Button variant="link" className="text-secondary p-0 me-3" onClick={() => startEdit(accommodation)} aria-label="Edit accommodation option">
-                          <FaEdit />
-                        </Button>
-                        <Button variant="link" className="text-secondary p-0 me-3" onClick={() => handleDuplicate(accommodation)} aria-label="Duplicate accommodation option">
-                          <FaClone />
-                        </Button>
-                        <Button variant="link" className="text-danger p-0" onClick={() => handleRemove(accommodation.id)} aria-label="Remove accommodation option">
-                          <FaTrash />
-                        </Button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))}
+              {groupByDate ? (
+                <>
+                  {accGroups.map((group) => {
+                    const groupSearchLinks = getAccommodationSearchLinks(searchLinks, destinationName, group.startDate, group.endDate);
+                    return (
+                      <React.Fragment key={group.key}>
+                        <tr className="table-light">
+                          <td colSpan={3}>
+                            <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 py-1">
+                              <div className="d-flex align-items-center gap-2">
+                                <strong>{group.label}</strong>
+                                <Badge bg="secondary" pill>{group.accommodations.length}</Badge>
+                              </div>
+                              <div className="d-flex gap-2">
+                                {groupSearchLinks.map((sl) => (
+                                  <a key={sl.label} href={sl.url} target="_blank" rel="noreferrer" className="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1">
+                                    <FaSearch size={10} /> {sl.label}
+                                  </a>
+                                ))}
+                                <Button size="sm" variant="outline-secondary" onClick={() => prefillDraftFromGroup(group.startDate, group.endDate)}>
+                                  <FaPlus className="me-1" /> Add another
+                                </Button>
+                              </div>
+                            </div>
+                          </td>
+                        </tr>
+                        {group.accommodations.map(renderAccRow)}
+                      </React.Fragment>
+                    );
+                  })}
+                </>
+              ) : (
+                displayedAccommodations.map(renderAccRow)
+              )}
 
               {displayedAccommodations.length === 0 && (
                 <tr>

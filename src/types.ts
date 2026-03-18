@@ -4,6 +4,9 @@ export interface Flight {
   description: string;
   startDate: string;
   endDate: string;
+  departureTime: string;
+  arrivalTime: string;
+  origin: string;
   pricePerPerson: number;
 }
 
@@ -53,9 +56,18 @@ export interface Destination {
   accommodations: Accommodation[];
 }
 
+export interface SearchLinkTemplate {
+  id: string;
+  label: string;
+  urlTemplate: string;
+  type: 'flight' | 'accommodation';
+  enabled: boolean;
+}
+
 export interface PlannerSettings {
   totalBudget: number;
   peopleCount: number;
+  searchLinks: SearchLinkTemplate[];
 }
 
 export const DUBLIN_COORDS: [number, number] = [53.3498, -6.2603];
