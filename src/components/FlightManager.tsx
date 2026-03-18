@@ -413,26 +413,26 @@ const FlightManager: React.FC<Props> = ({
             </Form.Group>
 
             <Form.Group>
-              <Form.Label className="small text-muted mb-1">Departs</Form.Label>
+              <Form.Label className="small text-muted mb-1">Arrives at</Form.Label>
               <Form.Control
                 size="sm"
                 type="time"
-                value={draft.departureTime ?? '12:00'}
-                onChange={(e) => setDraftValue({ departureTime: e.target.value })}
+                value={draft.arrivalTime || '12:00'}
+                onChange={(e) => setDraftValue({ arrivalTime: e.target.value })}
                 onKeyDown={handleQuickAddKeyDown}
-                aria-label="Departure time"
+                aria-label="Arrival time at destination"
               />
             </Form.Group>
 
             <Form.Group>
-              <Form.Label className="small text-muted mb-1">Arrives</Form.Label>
+              <Form.Label className="small text-muted mb-1">Departs at</Form.Label>
               <Form.Control
                 size="sm"
                 type="time"
-                value={draft.arrivalTime ?? '12:00'}
-                onChange={(e) => setDraftValue({ arrivalTime: e.target.value })}
+                value={draft.departureTime || '12:00'}
+                onChange={(e) => setDraftValue({ departureTime: e.target.value })}
                 onKeyDown={handleQuickAddKeyDown}
-                aria-label="Arrival time"
+                aria-label="Departure time from destination"
               />
             </Form.Group>
 
@@ -586,22 +586,27 @@ const FlightManager: React.FC<Props> = ({
                                   <Form.Control size="sm" placeholder="Origin (e.g. Dublin)" value={editForm.origin || ''} onChange={(e) => setEditForm({ ...editForm, origin: e.target.value })} />
                                   <div className="d-flex gap-2">
                                     <Form.Control size="sm" type="date" min={minDate} value={editForm.startDate || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleStartDateChange(e, true, setEditForm, editForm)} />
-                                    <Form.Control size="sm" type="time" value={editForm.departureTime ?? '12:00'} onChange={(e) => setEditForm({ ...editForm, departureTime: e.target.value })} />
+                                    <Form.Control size="sm" type="time" value={editForm.departureTime || '12:00'} onChange={(e) => setEditForm({ ...editForm, departureTime: e.target.value })} />
                                   </div>
                                   <div className="d-flex gap-2">
                                     <Form.Control ref={editFlightEndDateRef} size="sm" type="date" value={editForm.endDate || ''} min={editForm.startDate || ''} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} />
-                                    <Form.Control size="sm" type="time" value={editForm.arrivalTime ?? '12:00'} onChange={(e) => setEditForm({ ...editForm, arrivalTime: e.target.value })} />
+                                    <Form.Control size="sm" type="time" value={editForm.arrivalTime || '12:00'} onChange={(e) => setEditForm({ ...editForm, arrivalTime: e.target.value })} />
                                   </div>
-                                  <Form.Control size="sm" placeholder="Link" value={editForm.link || ''} onChange={(e) => setEditForm({ ...editForm, link: e.target.value })} />
+                                  <div className="d-flex gap-2 align-items-center">
+                                    <Form.Control size="sm" placeholder="Link" value={editForm.link || ''} onChange={(e) => setEditForm({ ...editForm, link: e.target.value })} />
+                                    {editForm.link && (
+                                      <a href={editForm.link} target="_blank" rel="noreferrer" className="btn btn-sm btn-outline-secondary" title="Open link"><FaExternalLinkAlt size={12} /></a>
+                                    )}
+                                  </div>
                                 </div>
                               ) : (
                                 <>
                                   <div className="fw-semibold">{flight.description || 'Flight Option'}</div>
                                   {flight.origin && <div className="small subtle-text">From: {flight.origin}</div>}
                                   <div className="small subtle-text my-1">
-                                    {flight.departureTime && `Departs ${flight.departureTime}`}
-                                    {flight.departureTime && flight.arrivalTime && ' · '}
-                                    {flight.arrivalTime && `Arrives ${flight.arrivalTime}`}
+                                    {flight.arrivalTime && `Arrives at ${flight.arrivalTime}`}
+                                    {flight.arrivalTime && flight.departureTime && ' · '}
+                                    {flight.departureTime && `Departs at ${flight.departureTime}`}
                                   </div>
                                   <a href={flight.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-inline-flex align-items-center gap-1">
                                     View Deal <FaExternalLinkAlt size={10} />
@@ -647,13 +652,18 @@ const FlightManager: React.FC<Props> = ({
                           <Form.Control size="sm" placeholder="Origin (e.g. Dublin)" value={editForm.origin || ''} onChange={(e) => setEditForm({ ...editForm, origin: e.target.value })} />
                           <div className="d-flex gap-2">
                             <Form.Control size="sm" type="date" min={minDate} value={editForm.startDate || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleStartDateChange(e, true, setEditForm, editForm)} />
-                            <Form.Control size="sm" type="time" value={editForm.departureTime ?? '12:00'} onChange={(e) => setEditForm({ ...editForm, departureTime: e.target.value })} />
+                            <Form.Control size="sm" type="time" value={editForm.departureTime || '12:00'} onChange={(e) => setEditForm({ ...editForm, departureTime: e.target.value })} />
                           </div>
                           <div className="d-flex gap-2">
                             <Form.Control ref={editFlightEndDateRef} size="sm" type="date" value={editForm.endDate || ''} min={editForm.startDate || ''} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} />
-                            <Form.Control size="sm" type="time" value={editForm.arrivalTime ?? '12:00'} onChange={(e) => setEditForm({ ...editForm, arrivalTime: e.target.value })} />
+                            <Form.Control size="sm" type="time" value={editForm.arrivalTime || '12:00'} onChange={(e) => setEditForm({ ...editForm, arrivalTime: e.target.value })} />
                           </div>
-                          <Form.Control size="sm" placeholder="Link" value={editForm.link || ''} onChange={(e) => setEditForm({ ...editForm, link: e.target.value })} />
+                          <div className="d-flex gap-2 align-items-center">
+                            <Form.Control size="sm" placeholder="Link" value={editForm.link || ''} onChange={(e) => setEditForm({ ...editForm, link: e.target.value })} />
+                            {editForm.link && (
+                              <a href={editForm.link} target="_blank" rel="noreferrer" className="btn btn-sm btn-outline-secondary" title="Open link"><FaExternalLinkAlt size={12} /></a>
+                            )}
+                          </div>
                         </div>
                       ) : (
                         <>
@@ -661,10 +671,10 @@ const FlightManager: React.FC<Props> = ({
                           {flight.origin && <div className="small subtle-text">From: {flight.origin}</div>}
                           <div className="small subtle-text my-1">
                             {flight.startDate || 'No start date'}
-                            {flight.departureTime && ` ${flight.departureTime}`}
+                            {flight.arrivalTime && ` (arrives ${flight.arrivalTime})`}
                             <span className="mx-1">to</span>
                             {flight.endDate || 'No end date'}
-                            {flight.arrivalTime && ` ${flight.arrivalTime}`}
+                            {flight.departureTime && ` (departs ${flight.departureTime})`}
                           </div>
                           <a href={flight.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-inline-flex align-items-center gap-1">
                             View Deal <FaExternalLinkAlt size={10} />

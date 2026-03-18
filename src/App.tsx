@@ -280,6 +280,7 @@ const normalizeAccommodationDraft = (accommodationDraft: unknown): Partial<Accom
   if (typeof typedDraft.totalPrice === 'number' && Number.isFinite(typedDraft.totalPrice) && typedDraft.totalPrice >= 0) {
     normalizedDraft.totalPrice = typedDraft.totalPrice;
   }
+  if (typeof typedDraft.imageUrl === 'string') normalizedDraft.imageUrl = typedDraft.imageUrl;
 
   return normalizedDraft;
 };
@@ -395,7 +396,8 @@ const normalizeAccommodationList = (accommodations: unknown): Accommodation[] =>
         description: typeof typedAccommodation.description === 'string' ? typedAccommodation.description : '',
         startDate: typeof typedAccommodation.startDate === 'string' ? typedAccommodation.startDate : '',
         endDate: typeof typedAccommodation.endDate === 'string' ? typedAccommodation.endDate : '',
-        totalPrice: parsedPrice !== null && parsedPrice >= 0 ? parsedPrice : 0
+        totalPrice: parsedPrice !== null && parsedPrice >= 0 ? parsedPrice : 0,
+        ...(typeof typedAccommodation.imageUrl === 'string' && typedAccommodation.imageUrl ? { imageUrl: typedAccommodation.imageUrl } : {})
       };
     })
     .filter((accommodation): accommodation is Accommodation => accommodation !== null);

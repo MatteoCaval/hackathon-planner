@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Table, Button, Form, Card, Modal, InputGroup, Row, Col, Badge } from 'react-bootstrap';
 import { v4 as uuidv4 } from 'uuid';
 import { Accommodation, SearchLinkTemplate } from '../types';
@@ -53,6 +53,16 @@ interface ParsedBulkAccommodation {
 }
 
 type SortBy = 'price' | 'description' | 'startDate';
+type ImageStatus = 'idle' | 'loading' | 'valid' | 'error';
+
+const validateImageUrl = (url: string): Promise<boolean> =>
+  new Promise((resolve) => {
+    if (!url.trim()) { resolve(false); return; }
+    const img = new Image();
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = url;
+  });
 
 const parseBulkAccommodations = (bulkInput: string): ParsedBulkAccommodation[] => {
   return bulkInput
@@ -110,6 +120,31 @@ const AccommodationManager: React.FC<Props> = ({
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [groupByDate, setGroupByDate] = useState(true);
 
+  const [draftImageStatus, setDraftImageStatus] = useState<ImageStatus>('idle');
+  const [editImageStatus, setEditImageStatus] = useState<ImageStatus>('idle');
+
+  useEffect(() => {
+    const url = draft.imageUrl || '';
+    if (!url) { setDraftImageStatus('idle'); return; }
+    setDraftImageStatus('loading');
+    let cancelled = false;
+    validateImageUrl(url).then((ok) => {
+      if (!cancelled) setDraftImageStatus(ok ? 'valid' : 'error');
+    });
+    return () => { cancelled = true; };
+  }, [draft.imageUrl]);
+
+  useEffect(() => {
+    const url = editForm.imageUrl || '';
+    if (!url) { setEditImageStatus('idle'); return; }
+    setEditImageStatus('loading');
+    let cancelled = false;
+    validateImageUrl(url).then((ok) => {
+      if (!cancelled) setEditImageStatus(ok ? 'valid' : 'error');
+    });
+    return () => { cancelled = true; };
+  }, [editForm.imageUrl]);
+
   const quickAddDescriptionRef = React.useRef<HTMLInputElement>(null);
   const quickAddEndDateRef = React.useRef<HTMLInputElement>(null);
   const editAccEndDateRef = React.useRef<HTMLInputElement>(null);
@@ -121,7 +156,8 @@ const AccommodationManager: React.FC<Props> = ({
 
   const isDraftLinkValid = Boolean(draft.link);
   const isDraftPriceValid = typeof draft.totalPrice === 'number' && draft.totalPrice > 0;
-  const isDraftValid = isDraftLinkValid && isDraftPriceValid;
+  const isDraftImageValid = !draft.imageUrl || draftImageStatus === 'valid';
+  const isDraftValid = isDraftLinkValid && isDraftPriceValid && isDraftImageValid;
 
   const setDraftValue = (updates: Partial<Accommodation>) => {
     onDraftChange({ ...draft, ...updates });
@@ -167,7 +203,8 @@ const AccommodationManager: React.FC<Props> = ({
       description: draft.description || '',
       totalPrice: Number(draft.totalPrice),
       startDate: draft.startDate || '',
-      endDate: draft.endDate || ''
+      endDate: draft.endDate || '',
+      ...(draft.imageUrl ? { imageUrl: draft.imageUrl } : {})
     };
 
     onChange([...accommodations, acc]);
@@ -199,15 +236,20 @@ const AccommodationManager: React.FC<Props> = ({
   const startEdit = (accommodation: Accommodation) => {
     setEditingId(accommodation.id);
     setEditForm(accommodation);
+    setEditImageStatus(accommodation.imageUrl ? 'valid' : 'idle');
   };
 
   const cancelEdit = () => {
     setEditingId(null);
     setEditForm({});
+    setEditImageStatus('idle');
   };
 
   const saveEdit = () => {
     if (!(editingId && editForm.link && editForm.totalPrice)) {
+      return;
+    }
+    if (editForm.imageUrl && editImageStatus !== 'valid') {
       return;
     }
 
@@ -349,18 +391,49 @@ const AccommodationManager: React.FC<Props> = ({
               <Form.Control size="sm" type="date" min={minDate} value={editForm.startDate || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleStartDateChange(e, true, setEditForm, editForm)} />
               <Form.Control ref={editAccEndDateRef} size="sm" type="date" value={editForm.endDate || ''} min={editForm.startDate || ''} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} />
             </div>
-            <Form.Control size="sm" placeholder="Link" value={editForm.link || ''} onChange={(e) => setEditForm({ ...editForm, link: e.target.value })} />
+            <div className="d-flex gap-2 align-items-center">
+              <Form.Control size="sm" placeholder="Link" value={editForm.link || ''} onChange={(e) => setEditForm({ ...editForm, link: e.target.value })} />
+              {editForm.link && (
+                <a href={editForm.link} target="_blank" rel="noreferrer" className="btn btn-sm btn-outline-secondary" title="Open link"><FaExternalLinkAlt size={12} /></a>
+              )}
+            </div>
+            <div>
+              <Form.Control
+                size="sm"
+                placeholder="Image URL (optional)"
+                value={editForm.imageUrl || ''}
+                isInvalid={editImageStatus === 'error'}
+                isValid={editImageStatus === 'valid'}
+                onChange={(e) => setEditForm({ ...editForm, imageUrl: e.target.value })}
+              />
+              {editImageStatus === 'loading' && <div className="small text-muted mt-1">Checking image…</div>}
+              {editImageStatus === 'error' && <div className="small text-danger mt-1">Image could not be loaded. Check the URL.</div>}
+              {editImageStatus === 'valid' && (
+                <img src={editForm.imageUrl} alt="preview" style={{ marginTop: 6, width: 80, height: 56, objectFit: 'cover', borderRadius: 4 }} />
+              )}
+            </div>
           </div>
         ) : (
-          <>
-            <div className="fw-semibold">{accommodation.description || 'Accommodation Option'}</div>
-            <div className="small subtle-text my-1">
-              {accommodation.startDate || 'No start date'} <span className="mx-1">to</span> {accommodation.endDate || 'No end date'}
+          <div className="d-flex gap-2">
+            {accommodation.imageUrl && (
+              <a href={accommodation.imageUrl} target="_blank" rel="noreferrer" title="View image" style={{ display: 'block', alignSelf: 'stretch', flexShrink: 0 }}>
+                <img
+                  src={accommodation.imageUrl}
+                  alt={accommodation.description || 'Accommodation'}
+                  style={{ width: 72, height: '100%', objectFit: 'cover', borderRadius: 6, display: 'block', border: '1px solid var(--bs-border-color)' }}
+                />
+              </a>
+            )}
+            <div>
+              <div className="fw-semibold">{accommodation.description || 'Accommodation Option'}</div>
+              <div className="small subtle-text my-1">
+                {accommodation.startDate || 'No start date'} <span className="mx-1">to</span> {accommodation.endDate || 'No end date'}
+              </div>
+              <a href={accommodation.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-inline-flex align-items-center gap-1">
+                View Stay <FaExternalLinkAlt size={10} />
+              </a>
             </div>
-            <a href={accommodation.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-inline-flex align-items-center gap-1">
-              View Stay <FaExternalLinkAlt size={10} />
-            </a>
-          </>
+          </div>
         )}
       </td>
       <td style={{ verticalAlign: editingId === accommodation.id ? 'top' : 'middle' }}>
@@ -476,6 +549,25 @@ const AccommodationManager: React.FC<Props> = ({
                 onKeyDown={handleQuickAddKeyDown}
                 aria-label="Accommodation total price"
               />
+            </Form.Group>
+
+            <Form.Group>
+              <Form.Label className="small text-muted mb-1">Image URL</Form.Label>
+              <Form.Control
+                size="sm"
+                placeholder="https://... (optional)"
+                value={draft.imageUrl || ''}
+                isInvalid={draftImageStatus === 'error'}
+                isValid={draftImageStatus === 'valid'}
+                onChange={(e) => setDraftValue({ imageUrl: e.target.value })}
+                onKeyDown={handleQuickAddKeyDown}
+                aria-label="Accommodation image URL"
+              />
+              {draftImageStatus === 'loading' && <div className="small text-muted mt-1">Checking image…</div>}
+              {draftImageStatus === 'error' && <div className="small text-danger mt-1">Image could not be loaded. Check the URL.</div>}
+              {draftImageStatus === 'valid' && (
+                <img src={draft.imageUrl} alt="preview" style={{ marginTop: 6, width: 80, height: 56, objectFit: 'cover', borderRadius: 4 }} />
+              )}
             </Form.Group>
           </div>
 

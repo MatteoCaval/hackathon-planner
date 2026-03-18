@@ -17,6 +17,7 @@ export interface Accommodation {
   totalPrice: number;
   startDate: string;
   endDate: string;
+  imageUrl?: string;
 }
 
 export interface ExtraCost {
