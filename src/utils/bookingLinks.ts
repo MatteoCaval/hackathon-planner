@@ -46,7 +46,7 @@ const buildUrl = (
 ): string => {
   return template
     .replace(/\{origin\}/g, encodeURIComponent(origin || 'Dublin'))
-    .replace(/\{destination\}/g, encodeURIComponent(destination))
+    .replace(/\{destination\}/g, destination)
     .replace(/\{startDate\}/g, startDate)
     .replace(/\{endDate\}/g, endDate)
     .replace(/\{people\}/g, String(people ?? 1));

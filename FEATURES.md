@@ -22,7 +22,9 @@ Track feature ideas for the Hackathon Planner. Add ideas below and Claude Code w
 - [x] Group by dates enabled by default in both flight and accommodation managers
 - [x] "Add another" scrolls to and focuses the quick-add form with dates pre-filled
 - [x] UI/UX review: responsive quick-add grid, touch-friendly action buttons, reduced-motion support, font preloading, aria-labels, removed duplicate Leaflet CSS, fixed mobile viewport units
-- [ ] voting systems: as you can see all of this is for a team to go somewhere in a retreat, we need to accomodate everyone's needs. we want to persist these votes in firebase togetehr with the trip
-	- [ ] a way of impersonify a person, somewhere maybe in the top having a list of people a choose the one to impersonate (it's all based on trust) and if your name is missing from the list you can add it
-	- [ ] once the person is chose, we want to be able to add/remove vote in every kind of option (flight, acoommodation, destination)
+- [x] voting systems: as you can see all of this is for a team to go somewhere in a retreat, we need to accomodate everyone's needs. we want to persist these votes in firebase togetehr with the trip
+	- [x] a way of impersonify a person, somewhere maybe in the top having a list of people a choose the one to impersonate (it's all based on trust) and if your name is missing from the list you can add it
+	- [x] once the person is chose, we want to be able to add/remove vote in every kind of option (flight, acoommodation, destination)
 	- [ ] we then need to be able to then review the votes somehow
+- [x] Real-time sync: replaced manual push/pull with automatic Firebase sync. Enter a trip code and click Join — all changes (destinations, settings, votes, members) sync live across all connected browsers. Join modal warns before overriding local data with remote.
+- [x] Accommodation search links include `{people}` placeholder — Booking.com and Airbnb links auto-fill the team's people count

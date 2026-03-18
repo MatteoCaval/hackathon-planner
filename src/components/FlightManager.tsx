@@ -566,8 +566,8 @@ const FlightManager: React.FC<Props> = ({
                               </div>
                               <div className="d-flex gap-2">
                                 {groupSearchLinks.map((sl) => (
-                                  <a key={sl.label} href={sl.url} target="_blank" rel="noreferrer" className="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1">
-                                    <FaSearch size={10} /> {sl.label}
+                                  <a key={sl.label} href={sl.url} target="_blank" rel="noreferrer" className="btn btn-outline-warning btn-sm d-inline-flex align-items-center gap-1" title="Link may not pre-fill correctly — work in progress">
+                                    <FaSearch size={10} /> {sl.label} (beta)
                                   </a>
                                 ))}
                                 <Button size="sm" variant="outline-secondary" onClick={() => prefillDraftFromGroup(group.startDate, group.endDate)}>
