@@ -343,8 +343,17 @@ const BudgetCalculator: React.FC<Props> = ({
                 </Form.Select>
 
                 {selectedAccommodation && (
-                  <div className="small subtle-text mt-2">
-                    Selected: <strong>{selectedAccommodation.description || 'Accommodation option'}</strong>
+                  <div className="d-flex align-items-center gap-2 mt-2">
+                    {selectedAccommodation.imageUrl && (
+                      <img
+                        src={selectedAccommodation.imageUrl}
+                        alt={selectedAccommodation.description || 'Accommodation'}
+                        style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6, flexShrink: 0, border: '1px solid var(--bs-border-color)' }}
+                      />
+                    )}
+                    <div className="small subtle-text">
+                      Selected: <strong>{selectedAccommodation.description || 'Accommodation option'}</strong>
+                    </div>
                   </div>
                 )}
               </Form.Group>
