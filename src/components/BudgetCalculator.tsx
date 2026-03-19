@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Card, Form, Row, Col, Button, Alert } from 'react-bootstrap';
 import { Flight, Accommodation, ExtraCost, PlannerSettings, BudgetAttempt } from '../types';
 import { FaPlane, FaBed, FaCalculator, FaPlus, FaTrash, FaFlask, FaSync } from 'react-icons/fa';
@@ -38,6 +38,89 @@ const areAssignmentsEqual = (left: Record<string, number>, right: Record<string,
   return leftEntries.every(([flightId, count]) => right[flightId] === count);
 };
 
+const AccommodationDropdown: React.FC<{
+  accommodations: Accommodation[];
+  selectedId: string;
+  onChange: (id: string) => void;
+}> = ({ accommodations, selectedId, onChange }) => {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  const selected = accommodations.find((a) => a.id === selectedId);
+
+  useEffect(() => {
+    const handler = (e: MouseEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    document.addEventListener('mousedown', handler);
+    return () => document.removeEventListener('mousedown', handler);
+  }, []);
+
+  const select = (id: string) => { onChange(id); setOpen(false); };
+
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <button
+        type="button"
+        onClick={() => setOpen((o) => !o)}
+        style={{
+          width: '100%', display: 'flex', alignItems: 'center', gap: 8,
+          padding: '6px 10px', background: 'var(--bs-body-bg)', border: '1px solid var(--bs-border-color)',
+          borderRadius: 6, cursor: 'pointer', textAlign: 'left', color: 'var(--bs-body-color)'
+        }}
+      >
+        {selected ? (
+          <>
+            {selected.imageUrl && (
+              <img src={selected.imageUrl} alt="" style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />
+            )}
+            <span className="small flex-grow-1">{formatCurrency(selected.totalPrice)} — {selected.description || 'Accommodation option'}</span>
+          </>
+        ) : (
+          <span className="small text-muted flex-grow-1">— Select accommodation —</span>
+        )}
+        <span style={{ fontSize: 10, opacity: 0.5 }}>▼</span>
+      </button>
+
+      {open && (
+        <div style={{
+          position: 'absolute', zIndex: 1000, width: '100%', top: 'calc(100% + 4px)',
+          background: 'var(--bs-body-bg)', border: '1px solid var(--bs-border-color)',
+          borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', maxHeight: 260, overflowY: 'auto'
+        }}>
+          <div
+            onClick={() => select('')}
+            style={{ display: 'flex', alignItems: 'center', padding: '8px 10px', cursor: 'pointer', gap: 8 }}
+            className="dropdown-item small text-muted"
+          >
+            — Select accommodation —
+          </div>
+          {accommodations.map((acc) => (
+            <div
+              key={acc.id}
+              onClick={() => select(acc.id)}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', cursor: 'pointer',
+                background: acc.id === selectedId ? 'var(--bs-primary-bg-subtle)' : undefined
+              }}
+              className="dropdown-item"
+            >
+              {acc.imageUrl ? (
+                <img src={acc.imageUrl} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />
+              ) : (
+                <div style={{ width: 40, height: 40, borderRadius: 4, flexShrink: 0, background: 'var(--bs-secondary-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🏨</div>
+              )}
+              <div className="small">
+                <div>{acc.description || 'Accommodation option'}</div>
+                <div className="text-muted">{formatCurrency(acc.totalPrice)}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+};
+
 const BudgetCalculator: React.FC<Props> = ({
   flights,
   accommodations,
@@ -65,7 +148,6 @@ const BudgetCalculator: React.FC<Props> = ({
   }, [flights, accommodations, flightAssignments, selectedAccommodationId, extraCosts, settings]);
 
   const savedAttempt = attempts.find((attempt) => attempt.id === fixedAttemptId) ?? attempts[0] ?? null;
-  const selectedAccommodation = accommodations.find((accommodation) => accommodation.id === selectedAccommodationId);
   const isOverAssigned = snapshot.isOverAssigned;
   const hasUnsavedChanges = savedAttempt
     ? (
@@ -329,33 +411,11 @@ const BudgetCalculator: React.FC<Props> = ({
                 <Form.Label className="d-flex align-items-center gap-2 mb-2">
                   <FaBed /> Accommodation
                 </Form.Label>
-                <Form.Select
-                  value={selectedAccommodationId}
-                  onChange={(e) => onSelectedAccommodationChange(e.target.value)}
-                  aria-label="Select accommodation for budget"
-                >
-                  <option value="">-- Select accommodation --</option>
-                  {accommodations.map((accommodation) => (
-                    <option key={accommodation.id} value={accommodation.id}>
-                      {formatCurrency(accommodation.totalPrice)} - {accommodation.description || 'Accommodation option'}
-                    </option>
-                  ))}
-                </Form.Select>
-
-                {selectedAccommodation && (
-                  <div className="d-flex align-items-center gap-2 mt-2">
-                    {selectedAccommodation.imageUrl && (
-                      <img
-                        src={selectedAccommodation.imageUrl}
-                        alt={selectedAccommodation.description || 'Accommodation'}
-                        style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 6, flexShrink: 0, border: '1px solid var(--bs-border-color)' }}
-                      />
-                    )}
-                    <div className="small subtle-text">
-                      Selected: <strong>{selectedAccommodation.description || 'Accommodation option'}</strong>
-                    </div>
-                  </div>
-                )}
+                <AccommodationDropdown
+                  accommodations={accommodations}
+                  selectedId={selectedAccommodationId}
+                  onChange={onSelectedAccommodationChange}
+                />
               </Form.Group>
 
               <Form.Group>
