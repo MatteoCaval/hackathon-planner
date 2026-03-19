@@ -17,6 +17,7 @@ import {
   FaSearch
 } from 'react-icons/fa';
 import { getUrlAutofill } from '../utils/urlAutofill';
+import DateRangePicker from './DateRangePicker';
 import { formatCurrency } from '../utils/budget';
 import { getAccommodationSearchLinks } from '../utils/bookingLinks';
 import VoteButton from './VoteButton';
@@ -146,8 +147,7 @@ const AccommodationManager: React.FC<Props> = ({
   }, [editForm.imageUrl]);
 
   const quickAddDescriptionRef = React.useRef<HTMLInputElement>(null);
-  const quickAddEndDateRef = React.useRef<HTMLInputElement>(null);
-  const editAccEndDateRef = React.useRef<HTMLInputElement>(null);
+  const quickAddPriceRef = React.useRef<HTMLInputElement>(null);
 
   const currentYear = new Date().getFullYear();
   const minDate = `${currentYear}-04-01`;
@@ -161,34 +161,6 @@ const AccommodationManager: React.FC<Props> = ({
 
   const setDraftValue = (updates: Partial<Accommodation>) => {
     onDraftChange({ ...draft, ...updates });
-  };
-
-  const handleStartDateChange = (
-    e: React.ChangeEvent<HTMLInputElement>,
-    isEdit: boolean,
-    updateState: (value: Partial<Accommodation>) => void,
-    currentState: Partial<Accommodation>
-  ) => {
-    const newStart = e.target.value;
-    updateState({
-      ...currentState,
-      startDate: newStart,
-      endDate: currentState.endDate && currentState.endDate < newStart ? '' : currentState.endDate
-    });
-
-    if (newStart) {
-      setTimeout(() => {
-        const ref = isEdit ? editAccEndDateRef : quickAddEndDateRef;
-        if (ref.current) {
-          ref.current.focus();
-          try {
-            (ref.current as { showPicker?: () => void }).showPicker?.();
-          } catch {
-            // showPicker not available in every browser.
-          }
-        }
-      }, 50);
-    }
   };
 
   const handleAdd = (focusNext = false) => {
@@ -387,10 +359,12 @@ const AccommodationManager: React.FC<Props> = ({
         {editingId === accommodation.id ? (
           <div className="d-flex flex-column gap-2">
             <Form.Control size="sm" placeholder="Description" value={editForm.description || ''} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
-            <div className="d-flex gap-2">
-              <Form.Control size="sm" type="date" min={minDate} value={editForm.startDate || ''} onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleStartDateChange(e, true, setEditForm, editForm)} />
-              <Form.Control ref={editAccEndDateRef} size="sm" type="date" value={editForm.endDate || ''} min={editForm.startDate || ''} onChange={(e) => setEditForm({ ...editForm, endDate: e.target.value })} />
-            </div>
+            <DateRangePicker
+              startDate={editForm.startDate || ''}
+              endDate={editForm.endDate || ''}
+              minDate={minDate}
+              onChange={(start, end) => setEditForm({ ...editForm, startDate: start, endDate: end })}
+            />
             <div className="d-flex gap-2 align-items-center">
               <Form.Control size="sm" placeholder="Link" value={editForm.link || ''} onChange={(e) => setEditForm({ ...editForm, link: e.target.value })} />
               {editForm.link && (
@@ -491,32 +465,12 @@ const AccommodationManager: React.FC<Props> = ({
               />
             </Form.Group>
 
-            <Form.Group>
-              <Form.Label className="small text-muted mb-1">Start</Form.Label>
-              <Form.Control
-                size="sm"
-                type="date"
-                min={minDate}
-                value={draft.startDate || ''}
-                onChange={(e: React.ChangeEvent<HTMLInputElement>) => handleStartDateChange(e, false, setDraftValue, draft)}
-                onKeyDown={handleQuickAddKeyDown}
-                aria-label="Accommodation start date"
-              />
-            </Form.Group>
-
-            <Form.Group>
-              <Form.Label className="small text-muted mb-1">End</Form.Label>
-              <Form.Control
-                ref={quickAddEndDateRef}
-                size="sm"
-                type="date"
-                min={draft.startDate || minDate}
-                value={draft.endDate || ''}
-                onChange={(e) => setDraftValue({ endDate: e.target.value })}
-                onKeyDown={handleQuickAddKeyDown}
-                aria-label="Accommodation end date"
-              />
-            </Form.Group>
+            <DateRangePicker
+              startDate={draft.startDate || ''}
+              endDate={draft.endDate || ''}
+              minDate={minDate}
+              onChange={(start, end) => setDraftValue({ startDate: start, endDate: end })}
+            />
 
             <Form.Group>
               <Form.Label className="small text-muted mb-1">Link</Form.Label>
@@ -538,8 +492,10 @@ const AccommodationManager: React.FC<Props> = ({
             <Form.Group>
               <Form.Label className="small text-muted mb-1">Total Price</Form.Label>
               <Form.Control
+                ref={quickAddPriceRef}
                 size="sm"
                 type="number"
+                inputMode="numeric"
                 step="10"
                 min="0"
                 placeholder="0"
