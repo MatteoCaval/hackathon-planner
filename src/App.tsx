@@ -11,7 +11,7 @@ import { useLocalStorage } from './useLocalStorage';
 import { Accommodation, BudgetAttempt, BudgetEstimatorState, Destination, ExtraCost, Flight, PlannerSettings, SearchLinkTemplate, TripVotes } from './types';
 import { DEFAULT_SEARCH_LINKS } from './utils/bookingLinks';
 import PersonSelector from './components/PersonSelector';
-import { FaCog, FaPlane, FaPlus, FaTrash, FaUsers, FaWallet } from 'react-icons/fa';
+import { FaCog, FaLink, FaPlane, FaPlus, FaTrash, FaUsers, FaWallet } from 'react-icons/fa';
 import { firebaseDatabase, isFirebaseConfigured } from './firebase';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'leaflet/dist/leaflet.css';
@@ -568,6 +568,52 @@ function App() {
   const normalizedSyncedCode = normalizeTripCode(syncedTripCode);
   const isSyncing = normalizedSyncedCode.length >= TRIP_CODE_MIN_LENGTH && isTripSyncAvailable;
 
+  // Auto-join from ?trip=CODE in URL
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const tripParam = params.get('trip');
+    if (!tripParam) return;
+
+    const code = normalizeTripCode(tripParam);
+    if (code.length < TRIP_CODE_MIN_LENGTH) return;
+
+    // Clean the URL param so it doesn't re-trigger
+    const url = new URL(window.location.href);
+    url.searchParams.delete('trip');
+    window.history.replaceState(null, '', url.pathname + url.search + url.hash);
+
+    // If already synced to this code, nothing to do
+    if (normalizeTripCode(syncedTripCode) === code) return;
+
+    // Auto-join: set the input and trigger join
+    setTripCodeInput(code);
+    const database = firebaseDatabase;
+    if (!isTripSyncAvailable || !database) return;
+
+    setIsJoining(true);
+    get(ref(database, `trips/${code}`)).then((snapshot) => {
+      if (snapshot.exists() && destinations.length > 0) {
+        setPendingJoinCode(code);
+        setShowJoinModal(true);
+      } else if (snapshot.exists()) {
+        setSyncedTripCode(code);
+      } else {
+        const payload: TripSyncPayload = {
+          destinations, settings, tripMembers, votes,
+          meta: { updatedAt: Date.now(), updatedBy: syncClientId }
+        };
+        return set(ref(database, `trips/${code}`), payload).then(() => {
+          setSyncedTripCode(code);
+        });
+      }
+    }).catch((error) => {
+      console.error('Failed to auto-join trip from URL', error);
+    }).finally(() => {
+      setIsJoining(false);
+    });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     if (!activeId && destinations.length > 0) {
       setActiveId(destinations[0].id);
@@ -843,6 +889,21 @@ function App() {
     setTripCodeInput('');
   };
 
+  const [shareTooltip, setShareTooltip] = useState('');
+  const handleShareTrip = () => {
+    const url = new URL(window.location.href);
+    url.searchParams.set('trip', normalizedSyncedCode);
+    // Remove hash so the link lands on the default view
+    url.hash = '';
+    void navigator.clipboard.writeText(url.toString()).then(() => {
+      setShareTooltip('Link copied!');
+      setTimeout(() => setShareTooltip(''), 2000);
+    }).catch(() => {
+      setShareTooltip('Copy failed');
+      setTimeout(() => setShareTooltip(''), 2000);
+    });
+  };
+
   return (
     <div className="app-shell d-flex flex-column">
       <Navbar className="app-topbar flex-shrink-0 py-2">
@@ -910,9 +971,14 @@ function App() {
                 </div>
                 <div className="trip-sync-controls">
                   {isSyncing ? (
-                    <Button size="sm" variant="outline-secondary" onClick={handleLeaveTrip}>
-                      Leave Trip
-                    </Button>
+                    <div className="d-flex gap-2 align-items-center">
+                      <Button size="sm" variant="outline-primary" onClick={handleShareTrip} title="Copy share link">
+                        <FaLink className="me-1" /> {shareTooltip || 'Share'}
+                      </Button>
+                      <Button size="sm" variant="outline-secondary" onClick={handleLeaveTrip}>
+                        Leave
+                      </Button>
+                    </div>
                   ) : (
                     <>
                       <Form.Control
@@ -1079,10 +1145,13 @@ function App() {
         <Modal.Body>
           <p>
             A trip with code <strong>{pendingJoinCode}</strong> already exists on the server.
-            Joining will <strong>replace your current local data</strong> with the remote trip.
+            {isSyncing
+              ? <> You are currently on trip <strong>{normalizedSyncedCode}</strong>. Joining will <strong>switch you to {pendingJoinCode}</strong>.</>
+              : <> Joining will <strong>replace your current local data</strong> with the remote trip.</>
+            }
           </p>
           <p className="text-muted small mb-0">
-            You can use the Export button to save your local data before joining.
+            You can use the Export button to save your current data before joining.
           </p>
         </Modal.Body>
         <Modal.Footer>
