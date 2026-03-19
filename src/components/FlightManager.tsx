@@ -21,6 +21,7 @@ import DateRangePicker from './DateRangePicker';
 import { formatCurrency } from '../utils/budget';
 import { getFlightSearchLinks } from '../utils/bookingLinks';
 import VoteButton from './VoteButton';
+import ClockTimePicker from './ClockTimePicker';
 
 interface Props {
   flights: Flight[];
@@ -111,8 +112,6 @@ const FlightManager: React.FC<Props> = ({
 
   const quickAddDescriptionRef = React.useRef<HTMLInputElement>(null);
   const quickAddPriceRef = React.useRef<HTMLInputElement>(null);
-
-  const TIME_PRESETS = ['06:00', '09:00', '12:00', '15:00', '18:00', '21:00'];
 
   const currentYear = new Date().getFullYear();
   const minDate = `${currentYear}-04-01`;
@@ -366,39 +365,17 @@ const FlightManager: React.FC<Props> = ({
               />
             </Form.Group>
 
-            <Form.Group>
-              <Form.Label className="small text-muted mb-1">Arrives at</Form.Label>
-              <Form.Control
-                size="sm"
-                type="time"
-                value={draft.arrivalTime || '12:00'}
-                onChange={(e) => setDraftValue({ arrivalTime: e.target.value })}
-                onKeyDown={handleQuickAddKeyDown}
-                aria-label="Arrival time at destination"
-              />
-              <div className="d-flex flex-wrap gap-1 mt-1">
-                {TIME_PRESETS.map((t) => (
-                  <button key={t} type="button" className="btn btn-outline-secondary" style={{ fontSize: 10, padding: '1px 5px', lineHeight: 1.4 }} onClick={() => setDraftValue({ arrivalTime: t })}>{t}</button>
-                ))}
-              </div>
-            </Form.Group>
+            <ClockTimePicker
+              label="Arrives at"
+              value={draft.arrivalTime || ''}
+              onChange={(t) => setDraftValue({ arrivalTime: t })}
+            />
 
-            <Form.Group>
-              <Form.Label className="small text-muted mb-1">Departs at</Form.Label>
-              <Form.Control
-                size="sm"
-                type="time"
-                value={draft.departureTime || '12:00'}
-                onChange={(e) => setDraftValue({ departureTime: e.target.value })}
-                onKeyDown={handleQuickAddKeyDown}
-                aria-label="Departure time from destination"
-              />
-              <div className="d-flex flex-wrap gap-1 mt-1">
-                {TIME_PRESETS.map((t) => (
-                  <button key={t} type="button" className="btn btn-outline-secondary" style={{ fontSize: 10, padding: '1px 5px', lineHeight: 1.4 }} onClick={() => setDraftValue({ departureTime: t })}>{t}</button>
-                ))}
-              </div>
-            </Form.Group>
+            <ClockTimePicker
+              label="Departs at"
+              value={draft.departureTime || ''}
+              onChange={(t) => setDraftValue({ departureTime: t })}
+            />
 
             <Form.Group>
               <Form.Label className="small text-muted mb-1">Link</Form.Label>
@@ -557,8 +534,8 @@ const FlightManager: React.FC<Props> = ({
                                     onChange={(start, end) => setEditForm({ ...editForm, startDate: start, endDate: end })}
                                   />
                                   <div className="d-flex gap-2">
-                                    <Form.Control size="sm" type="time" value={editForm.arrivalTime || '12:00'} onChange={(e) => setEditForm({ ...editForm, arrivalTime: e.target.value })} />
-                                    <Form.Control size="sm" type="time" value={editForm.departureTime || '12:00'} onChange={(e) => setEditForm({ ...editForm, departureTime: e.target.value })} />
+                                    <ClockTimePicker label="Arrives" value={editForm.arrivalTime || ''} onChange={(t) => setEditForm({ ...editForm, arrivalTime: t })} />
+                                    <ClockTimePicker label="Departs" value={editForm.departureTime || ''} onChange={(t) => setEditForm({ ...editForm, departureTime: t })} />
                                   </div>
                                   <div className="d-flex gap-2 align-items-center">
                                     <Form.Control size="sm" placeholder="Link" value={editForm.link || ''} onChange={(e) => setEditForm({ ...editForm, link: e.target.value })} />
