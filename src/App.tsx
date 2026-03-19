@@ -12,7 +12,7 @@ import { Accommodation, BudgetAttempt, BudgetEstimatorState, Destination, ExtraC
 import { DEFAULT_SEARCH_LINKS } from './utils/bookingLinks';
 import PersonSelector from './components/PersonSelector';
 import VoteSummary from './components/VoteSummary';
-import { FaCog, FaLink, FaPlane, FaPlus, FaPoll, FaTrash, FaUsers, FaWallet } from 'react-icons/fa';
+import { FaCog, FaLink, FaPlane, FaPlus, FaPoll, FaSync, FaTrash, FaUsers, FaWallet } from 'react-icons/fa';
 import { firebaseDatabase, isFirebaseConfigured } from './firebase';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'leaflet/dist/leaflet.css';
@@ -313,7 +313,7 @@ const hasInvalidAccommodationDraft = (accommodationDraft: unknown): boolean => {
     if (key === 'totalPrice') {
       return typeof value !== 'number' || !Number.isFinite(value) || value < 0;
     }
-    if (key === 'link' || key === 'description' || key === 'startDate' || key === 'endDate') {
+    if (key === 'link' || key === 'description' || key === 'startDate' || key === 'endDate' || key === 'imageUrl') {
       return typeof value !== 'string';
     }
     return true;
@@ -549,13 +549,18 @@ const parseTripSyncPayload = (payload: unknown, fallbackSettings: PlannerSetting
 function App() {
   const [destinations, setDestinations] = useLocalStorage<Destination[]>('hackathon-destinations', []);
   const [settings, setSettings] = useLocalStorage<PlannerSettings>('hackathon-settings', DEFAULT_SETTINGS);
-  const [activeId, setActiveId] = useState<string | null>(null);
+  const settingsRef = useRef<PlannerSettings>(DEFAULT_SETTINGS);
+  const [activeId, setActiveId] = useLocalStorage<string | null>('hackathon-active-id', null);
+  const [activeSection, setActiveSection] = useLocalStorage<string>('hackathon-active-section', 'overview');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSearchLinksModal, setShowSearchLinksModal] = useState(false);
   const [showVoteSummary, setShowVoteSummary] = useState(false);
   const [currentPerson, setCurrentPerson] = useLocalStorage<string>('hackathon-current-person', '');
   const [tripMembers, setTripMembers] = useLocalStorage<string[]>('hackathon-trip-members', []);
   const [votes, setVotes] = useLocalStorage<TripVotes>('hackathon-votes', DEFAULT_VOTES);
+
+  // Keep settingsRef in sync so the onValue Firebase listener always has the latest settings
+  settingsRef.current = settings;
 
   // Sync state
   const [syncedTripCode, setSyncedTripCode] = useLocalStorage<string>('hackathon-trip-code', '');
@@ -565,6 +570,7 @@ function App() {
   const [pendingJoinCode, setPendingJoinCode] = useState('');
   const [syncClientId] = useState(getOrCreateSyncClientId);
   const isRemoteUpdate = useRef(false);
+  const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
 
   const isTripSyncAvailable = isFirebaseConfigured && firebaseDatabase !== null;
   const normalizedSyncedCode = normalizeTripCode(syncedTripCode);
@@ -680,7 +686,7 @@ function App() {
       };
       setVotes(prunedVotes);
 
-      if (isSyncing && firebaseDatabase) {
+      if (isSyncing && firebaseDatabase && !isRemoteUpdate.current) {
         void set(ref(firebaseDatabase, `trips/${normalizedSyncedCode}/votes`), prunedVotes);
       }
     }
@@ -698,7 +704,7 @@ function App() {
       if (!snapshot.exists()) {
         return;
       }
-      const parsed = parseTripSyncPayload(snapshot.val(), settings);
+      const parsed = parseTripSyncPayload(snapshot.val(), settingsRef.current);
       if (!parsed) {
         return;
       }
@@ -708,6 +714,7 @@ function App() {
       setSettings(parsed.settings);
       setTripMembers(parsed.tripMembers);
       setVotes(parsed.votes);
+      setSyncStatus('synced');
       // Reset the flag after React processes the batch
       requestAnimationFrame(() => { isRemoteUpdate.current = false; });
     });
@@ -720,34 +727,69 @@ function App() {
 
   const activeDestination = destinations.find((destination) => destination.id === activeId);
 
-  // Firebase write helpers — only write when syncing and change is local (not from listener)
+  // Firebase write helpers — only write when syncing
   const syncToFirebase = (subPath: string, data: unknown) => {
-    if (!isSyncing || !firebaseDatabase || isRemoteUpdate.current) return;
-    void set(ref(firebaseDatabase, `trips/${normalizedSyncedCode}/${subPath}`), data);
+    if (!isSyncing || !firebaseDatabase) return;
+    setSyncStatus('syncing');
+    set(ref(firebaseDatabase, `trips/${normalizedSyncedCode}/${subPath}`), data)
+      .then(() => setSyncStatus('synced'))
+      .catch(() => setSyncStatus('error'));
     void set(ref(firebaseDatabase, `trips/${normalizedSyncedCode}/meta`), { updatedAt: Date.now(), updatedBy: syncClientId });
   };
 
+  const handleForceRefresh = () => {
+    if (!isSyncing || !firebaseDatabase) return;
+    setSyncStatus('syncing');
+    get(ref(firebaseDatabase, `trips/${normalizedSyncedCode}`)).then((snapshot) => {
+      if (!snapshot.exists()) { setSyncStatus('synced'); return; }
+      const parsed = parseTripSyncPayload(snapshot.val(), settingsRef.current);
+      if (!parsed) { setSyncStatus('error'); return; }
+      isRemoteUpdate.current = true;
+      setDestinations(parsed.destinations);
+      setSettings(parsed.settings);
+      setTripMembers(parsed.tripMembers);
+      setVotes(parsed.votes);
+      requestAnimationFrame(() => { isRemoteUpdate.current = false; });
+      setSyncStatus('synced');
+    }).catch(() => setSyncStatus('error'));
+  };
+
   const handleUpdateDestination = (destinationId: string, updater: (currentDestination: Destination) => Destination) => {
-    const newDests = destinations.map((d) => d.id === destinationId ? updater(d) : d);
-    setDestinations(newDests);
-    syncToFirebase('destinations', newDests);
+    // Functional updater ensures sequential calls in the same event (e.g. onChange + onDraftChange)
+    // each build on the previous result rather than on a shared stale snapshot.
+    let newDests: Destination[] = [];
+    setDestinations((prevDests) => {
+      newDests = prevDests.map((d) => d.id === destinationId ? updater(d) : d);
+      return newDests;
+    });
+    // queueMicrotask fires before any async Firebase onValue callback, so isRemoteUpdate is
+    // still false at this point and syncToFirebase will proceed.
+    queueMicrotask(() => syncToFirebase('destinations', newDests));
   };
 
   const handleAddDestination = (newDest: Destination) => {
     const destination = normalizeDestination(newDest);
-    const newDests = [...destinations, destination];
-    setDestinations(newDests);
+    let newDests: Destination[] = [];
+    setDestinations((prevDests) => {
+      newDests = [...prevDests, destination];
+      return newDests;
+    });
     setActiveId(newDest.id);
-    syncToFirebase('destinations', newDests);
+    queueMicrotask(() => syncToFirebase('destinations', newDests));
   };
 
   const handleRemoveDestination = (id: string) => {
-    const newDests = destinations.filter((d) => d.id !== id);
-    setDestinations(newDests);
-    if (activeId === id) {
-      setActiveId(newDests.length > 0 ? newDests[0].id : null);
-    }
-    syncToFirebase('destinations', newDests);
+    let newDests: Destination[] = [];
+    setDestinations((prevDests) => {
+      newDests = prevDests.filter((d) => d.id !== id);
+      return newDests;
+    });
+    queueMicrotask(() => {
+      syncToFirebase('destinations', newDests);
+      if (activeId === id) {
+        setActiveId(newDests.length > 0 ? newDests[0].id : null);
+      }
+    });
   };
 
   const handleImport = (data: Destination[]) => {
@@ -889,6 +931,7 @@ function App() {
   const handleLeaveTrip = () => {
     setSyncedTripCode('');
     setTripCodeInput('');
+    setSyncStatus('idle');
   };
 
   const [shareTooltip, setShareTooltip] = useState('');
@@ -974,12 +1017,30 @@ function App() {
                   >
                     {isSyncing ? `Live: ${normalizedSyncedCode}` : isTripSyncAvailable ? 'Not connected' : 'Unavailable'}
                   </span>
+                  {isSyncing && (
+                    <span
+                      title={syncStatus === 'synced' ? 'All changes synced' : syncStatus === 'syncing' ? 'Syncing…' : syncStatus === 'error' ? 'Sync error' : ''}
+                      style={{
+                        display: 'inline-block',
+                        width: 10,
+                        height: 10,
+                        borderRadius: '50%',
+                        flexShrink: 0,
+                        backgroundColor: syncStatus === 'synced' ? 'var(--bs-success)' : syncStatus === 'syncing' ? 'var(--bs-warning)' : syncStatus === 'error' ? 'var(--bs-danger)' : 'var(--bs-secondary)',
+                        boxShadow: syncStatus === 'syncing' ? '0 0 0 2px var(--bs-warning-bg-subtle)' : syncStatus === 'synced' ? '0 0 0 2px var(--bs-success-bg-subtle)' : 'none',
+                      }}
+                      aria-label={`Sync status: ${syncStatus}`}
+                    />
+                  )}
                 </div>
                 <div className="trip-sync-controls">
                   {isSyncing ? (
                     <div className="d-flex gap-2 align-items-center">
                       <Button size="sm" variant="outline-primary" onClick={handleShareTrip} title="Copy share link">
                         <FaLink className="me-1" /> {shareTooltip || 'Share'}
+                      </Button>
+                      <Button size="sm" variant="outline-secondary" onClick={handleForceRefresh} title="Pull latest from Firebase" disabled={syncStatus === 'syncing'}>
+                        <FaSync className={syncStatus === 'syncing' ? 'spin' : ''} />
                       </Button>
                       <Button size="sm" variant="outline-secondary" onClick={handleLeaveTrip}>
                         Leave
@@ -1026,7 +1087,7 @@ function App() {
         <Sidebar
           destinations={destinations}
           activeId={activeId}
-          onSelect={setActiveId}
+          onSelect={(id) => { setActiveId(id); setActiveSection('overview'); }}
           onAddClick={() => setShowAddModal(true)}
           onRemove={handleRemoveDestination}
           votes={votes.destinations}
@@ -1035,7 +1096,7 @@ function App() {
         />
 
         <div className="workspace-pane flex-grow-1 d-flex flex-column overflow-hidden">
-          <PersistentBudgetStatus destination={activeDestination} settings={settings} />
+          <PersistentBudgetStatus destination={activeDestination} settings={settings} activeSection={activeSection} />
 
           <main className="app-content flex-grow-1 overflow-auto position-relative" aria-live="polite">
             {activeDestination ? (
@@ -1046,6 +1107,7 @@ function App() {
                 votes={votes}
                 currentPerson={currentPerson}
                 onToggleVote={handleToggleVote}
+                onSectionChange={setActiveSection}
               />
             ) : (
               <section className="empty-state" aria-label="No destination selected">

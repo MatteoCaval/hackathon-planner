@@ -28,3 +28,5 @@ Track feature ideas for the Hackathon Planner. Add ideas below and Claude Code w
 	- [x] we then need to be able to then review the votes somehow
 - [x] Real-time sync: replaced manual push/pull with automatic Firebase sync. Enter a trip code and click Join — all changes (destinations, settings, votes, members) sync live across all connected browsers. Join modal warns before overriding local data with remote.
 - [x] Accommodation search links include `{people}` placeholder — Booking.com and Airbnb links auto-fill the team's people count
+- [x] add search accomodation in the stay too, it's very common to search accommodation after having found a good flight option
+- [x] when adding a new accommodation, suggest date range already of the flights (don't consider the one already added, cause in that case I can add them from the bottom)

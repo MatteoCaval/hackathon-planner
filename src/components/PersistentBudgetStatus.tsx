@@ -7,9 +7,10 @@ import { FaChartLine, FaExclamationTriangle } from 'react-icons/fa';
 interface Props {
   destination?: Destination;
   settings: PlannerSettings;
+  activeSection: string;
 }
 
-const PersistentBudgetStatus: React.FC<Props> = ({ destination, settings }) => {
+const PersistentBudgetStatus: React.FC<Props> = ({ destination, settings, activeSection }) => {
   const snapshot = useMemo(() => {
     if (!destination) {
       return null;
@@ -54,15 +55,15 @@ const PersistentBudgetStatus: React.FC<Props> = ({ destination, settings }) => {
             Over by {formatCurrency(Math.abs(snapshot.remaining))}
           </div>
         )}
-        <Button
-          size="sm"
-          variant="outline-secondary"
-          onClick={() => {
-            window.location.hash = 'budget';
-          }}
-        >
-          Open Budget
-        </Button>
+        {activeSection !== 'budget' && (
+          <Button
+            size="sm"
+            variant="outline-secondary"
+            onClick={() => { window.location.hash = 'budget'; }}
+          >
+            Open Budget
+          </Button>
+        )}
       </div>
     </section>
   );

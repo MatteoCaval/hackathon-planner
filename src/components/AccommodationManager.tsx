@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Table, Button, Form, Card, Modal, InputGroup, Row, Col, Badge } from 'react-bootstrap';
 import { v4 as uuidv4 } from 'uuid';
-import { Accommodation, SearchLinkTemplate } from '../types';
+import { Accommodation, Flight, SearchLinkTemplate } from '../types';
 import {
   FaTrash,
   FaEdit,
@@ -24,6 +24,7 @@ import VoteButton from './VoteButton';
 
 interface Props {
   accommodations: Accommodation[];
+  flights: Flight[];
   onChange: (acc: Accommodation[]) => void;
   draft: Partial<Accommodation>;
   onDraftChange: (draft: Partial<Accommodation>) => void;
@@ -100,6 +101,7 @@ const parseBulkAccommodations = (bulkInput: string): ParsedBulkAccommodation[] =
 
 const AccommodationManager: React.FC<Props> = ({
   accommodations,
+  flights,
   onChange,
   draft,
   onDraftChange,
@@ -154,10 +156,35 @@ const AccommodationManager: React.FC<Props> = ({
   const parsedBulkAccommodations = useMemo(() => parseBulkAccommodations(bulkInput), [bulkInput]);
   const validBulkAccommodations = parsedBulkAccommodations.filter((row) => !row.error);
 
+  const suggestedDateRanges = useMemo(() => {
+    const flightRangeKeys = new Set<string>();
+    const ranges: { startDate: string; endDate: string; label: string }[] = [];
+    for (const f of flights) {
+      if (!f.startDate || !f.endDate) continue;
+      const key = `${f.startDate}|${f.endDate}`;
+      if (flightRangeKeys.has(key)) continue;
+      flightRangeKeys.add(key);
+      const hasAccommodation = accommodations.some(
+        (a) => a.startDate === f.startDate && a.endDate === f.endDate
+      );
+      if (hasAccommodation) continue;
+      const fmt = (d: string) => {
+        const dt = new Date(d + 'T00:00:00');
+        return dt.toLocaleDateString('en-IE', { day: 'numeric', month: 'short' });
+      };
+      ranges.push({ startDate: f.startDate, endDate: f.endDate, label: `${fmt(f.startDate)} – ${fmt(f.endDate)}` });
+    }
+    return ranges;
+  }, [flights, accommodations]);
+
+  const draftSearchLinks = useMemo(() => {
+    if (!draft.startDate || !draft.endDate) return [];
+    return getAccommodationSearchLinks(searchLinks, destinationName, draft.startDate, draft.endDate, peopleCount);
+  }, [draft.startDate, draft.endDate, searchLinks, destinationName, peopleCount]);
+
   const isDraftLinkValid = Boolean(draft.link);
   const isDraftPriceValid = typeof draft.totalPrice === 'number' && draft.totalPrice > 0;
-  const isDraftImageValid = !draft.imageUrl || draftImageStatus === 'valid';
-  const isDraftValid = isDraftLinkValid && isDraftPriceValid && isDraftImageValid;
+  const isDraftImageValid = !draft.imageUrl || draftImageStatus === 'valid' || draftImageStatus === 'loading';
 
   const setDraftValue = (updates: Partial<Accommodation>) => {
     onDraftChange({ ...draft, ...updates });
@@ -165,7 +192,7 @@ const AccommodationManager: React.FC<Props> = ({
 
   const handleAdd = (focusNext = false) => {
     setAttemptedAdd(true);
-    if (!(draft.link && typeof draft.totalPrice === 'number' && draft.totalPrice > 0)) {
+    if (!(draft.link && typeof draft.totalPrice === 'number' && draft.totalPrice > 0) || !isDraftImageValid) {
       return;
     }
 
@@ -465,12 +492,31 @@ const AccommodationManager: React.FC<Props> = ({
               />
             </Form.Group>
 
-            <DateRangePicker
-              startDate={draft.startDate || ''}
-              endDate={draft.endDate || ''}
-              minDate={minDate}
-              onChange={(start, end) => setDraftValue({ startDate: start, endDate: end })}
-            />
+            <div>
+              <DateRangePicker
+                startDate={draft.startDate || ''}
+                endDate={draft.endDate || ''}
+                minDate={minDate}
+                onChange={(start, end) => setDraftValue({ startDate: start, endDate: end })}
+              />
+              {suggestedDateRanges.length > 0 && !draft.startDate && !draft.endDate && (
+                <div className="d-flex flex-wrap gap-1 mt-1">
+                  <span className="small text-muted" style={{ lineHeight: '24px' }}>From flights:</span>
+                  {suggestedDateRanges.map((r) => (
+                    <Badge
+                      key={`${r.startDate}|${r.endDate}`}
+                      bg="info"
+                      className="fw-normal"
+                      role="button"
+                      style={{ cursor: 'pointer', fontSize: '0.75rem' }}
+                      onClick={() => setDraftValue({ startDate: r.startDate, endDate: r.endDate })}
+                    >
+                      {r.label}
+                    </Badge>
+                  ))}
+                </div>
+              )}
+            </div>
 
             <Form.Group>
               <Form.Label className="small text-muted mb-1">Link</Form.Label>
@@ -527,12 +573,25 @@ const AccommodationManager: React.FC<Props> = ({
             </Form.Group>
           </div>
 
-          {(attemptedAdd && (!isDraftLinkValid || !isDraftPriceValid)) && (
-            <div className="inline-status error" role="status">Link and total price are required.</div>
+          {attemptedAdd && !isDraftLinkValid && (
+            <div className="inline-status error" role="status">A booking link is required.</div>
+          )}
+          {attemptedAdd && !isDraftPriceValid && (
+            <div className="inline-status error" role="status">A total price greater than 0 is required.</div>
+          )}
+          {attemptedAdd && !isDraftImageValid && (
+            <div className="inline-status error" role="status">Image URL could not be loaded — fix or remove it.</div>
           )}
 
-          <div className="d-flex justify-content-end mt-3">
-            <Button size="sm" variant="primary" onClick={() => handleAdd(false)} disabled={!isDraftValid}>
+          <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3">
+            <div className="d-flex flex-wrap gap-2">
+              {draftSearchLinks.map((sl) => (
+                <a key={sl.label} href={sl.url} target="_blank" rel="noreferrer" className="btn btn-outline-warning btn-sm d-inline-flex align-items-center gap-1" title="Search accommodation for selected dates">
+                  <FaSearch size={10} /> {sl.label}
+                </a>
+              ))}
+            </div>
+            <Button size="sm" variant="primary" onClick={() => handleAdd(false)}>
               <FaPlus className="me-1" /> Add Accommodation
             </Button>
           </div>

@@ -16,6 +16,7 @@ interface Props {
   votes: TripVotes;
   currentPerson: string;
   onToggleVote: (category: keyof TripVotes, entityId: string) => void;
+  onSectionChange?: (section: string) => void;
 }
 
 type WorkspaceSection = 'overview' | 'flights' | 'accommodations' | 'budget';
@@ -38,7 +39,7 @@ const getCurrentHashSection = (): WorkspaceSection => {
   return isWorkspaceSection(hash) ? hash : DEFAULT_SECTION;
 };
 
-const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate, votes, currentPerson, onToggleVote }) => {
+const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate, votes, currentPerson, onToggleVote, onSectionChange }) => {
   const [activeSection, setActiveSection] = useState<WorkspaceSection>(() => getCurrentHashSection());
 
   useEffect(() => {
@@ -56,6 +57,7 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate, vot
     setActiveSection(nextSection);
     const { pathname, search } = window.location;
     window.history.replaceState(null, '', `${pathname}${search}#${nextSection}`);
+    onSectionChange?.(nextSection);
   };
 
   const commitUpdate = (updater: (currentDestination: Destination) => Destination) => {
@@ -441,6 +443,7 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate, vot
         <section aria-label="Accommodation management section">
           <AccommodationManager
             accommodations={destination.accommodations}
+            flights={destination.flights}
             onChange={handleAccChange}
             draft={destination.accommodationDraft}
             onDraftChange={handleAccommodationDraftChange}
