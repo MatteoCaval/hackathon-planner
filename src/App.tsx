@@ -11,7 +11,8 @@ import { useLocalStorage } from './useLocalStorage';
 import { Accommodation, BudgetAttempt, BudgetEstimatorState, Destination, ExtraCost, Flight, PlannerSettings, SearchLinkTemplate, TripVotes } from './types';
 import { DEFAULT_SEARCH_LINKS } from './utils/bookingLinks';
 import PersonSelector from './components/PersonSelector';
-import { FaCog, FaLink, FaPlane, FaPlus, FaTrash, FaUsers, FaWallet } from 'react-icons/fa';
+import VoteSummary from './components/VoteSummary';
+import { FaCog, FaLink, FaPlane, FaPlus, FaPoll, FaTrash, FaUsers, FaWallet } from 'react-icons/fa';
 import { firebaseDatabase, isFirebaseConfigured } from './firebase';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'leaflet/dist/leaflet.css';
@@ -551,6 +552,7 @@ function App() {
   const [activeId, setActiveId] = useState<string | null>(null);
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSearchLinksModal, setShowSearchLinksModal] = useState(false);
+  const [showVoteSummary, setShowVoteSummary] = useState(false);
   const [currentPerson, setCurrentPerson] = useLocalStorage<string>('hackathon-current-person', '');
   const [tripMembers, setTripMembers] = useLocalStorage<string[]>('hackathon-trip-members', []);
   const [votes, setVotes] = useLocalStorage<TripVotes>('hackathon-votes', DEFAULT_VOTES);
@@ -953,6 +955,10 @@ function App() {
                   onAddMember={handleAddTripMember}
                 />
 
+                <Button size="sm" variant="outline-secondary" onClick={() => setShowVoteSummary(true)} title="Vote results" aria-label="Vote results">
+                  <FaPoll />
+                </Button>
+
                 <Button size="sm" variant="outline-secondary" onClick={() => setShowSearchLinksModal(true)} title="Search link settings" aria-label="Search link settings">
                   <FaCog />
                 </Button>
@@ -1137,6 +1143,14 @@ function App() {
           </div>
         </Modal.Body>
       </Modal>
+
+      <VoteSummary
+        show={showVoteSummary}
+        onHide={() => setShowVoteSummary(false)}
+        destinations={destinations}
+        votes={votes}
+        tripMembers={tripMembers}
+      />
 
       <Modal show={showJoinModal} onHide={handleCancelJoin} centered>
         <Modal.Header closeButton>

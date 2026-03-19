@@ -1008,6 +1008,31 @@ a:hover {
   min-width: 200px;
 }
 
+/* Vote summary */
+.vote-ranked-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.vote-ranked-item {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.vote-rank {
+  width: 28px;
+  text-align: center;
+  padding-top: 2px;
+  flex-shrink: 0;
+}
+
+.vote-ranked-info {
+  flex: 1;
+  min-width: 0;
+}
+
 /* Clock time picker */
 .clock-time-picker {
   position: relative;
