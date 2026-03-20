@@ -1052,12 +1052,7 @@ a:hover {
 }
 
 .clock-popover {
-  position: absolute;
   z-index: 1051;
-  top: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  margin-top: 4px;
   background: var(--bg-surface);
   border: 1px solid var(--color-neutral-300);
   border-radius: 12px;

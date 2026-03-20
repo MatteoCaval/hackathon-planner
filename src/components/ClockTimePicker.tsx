@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback } from 'react';
+import { createPortal } from 'react-dom';
 import { FaClock } from 'react-icons/fa';
 
 interface Props {
@@ -71,8 +72,13 @@ const ClockTimePicker: React.FC<Props> = ({ value, onChange, label, size = 'sm' 
     const parts = value.split(':');
     return parts.length === 2 ? parseInt(parts[1], 10) || 0 : 0;
   });
+  const [popoverPos, setPopoverPos] = useState({ top: 0, left: 0 });
   const svgRef = useRef<SVGSVGElement | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+
+  // Estimated popover dimensions for viewport clamping
+  const POPOVER_W = 240;
+  const POPOVER_H = 330;
 
   const openPicker = () => {
     const parts = value.split(':');
@@ -81,6 +87,21 @@ const ClockTimePicker: React.FC<Props> = ({ value, onChange, label, size = 'sm' 
       setSelectedMinute(parseInt(parts[1], 10) || 0);
     }
     setMode('hour');
+    const el = triggerRef.current;
+    if (el) {
+      const rect = el.getBoundingClientRect();
+      const centerX = rect.left + rect.width / 2;
+      // Clamp left so popover stays within viewport
+      const left = Math.min(
+        Math.max(POPOVER_W / 2 + 8, centerX),
+        window.innerWidth - POPOVER_W / 2 - 8
+      );
+      // Flip above button if not enough room below
+      const top = rect.bottom + 4 + POPOVER_H > window.innerHeight
+        ? rect.top - POPOVER_H - 4
+        : rect.bottom + 4;
+      setPopoverPos({ top, left });
+    }
     setOpen(true);
   };
 
@@ -186,9 +207,10 @@ const ClockTimePicker: React.FC<Props> = ({ value, onChange, label, size = 'sm' 
   };
 
   return (
-    <div className="clock-time-picker" ref={containerRef}>
+    <div className="clock-time-picker">
       {label && <label className="small text-muted mb-1 d-block">{label}</label>}
       <button
+        ref={triggerRef}
         type="button"
         className={`clock-trigger form-control form-control-${size} d-flex align-items-center gap-2`}
         onClick={openPicker}
@@ -197,10 +219,13 @@ const ClockTimePicker: React.FC<Props> = ({ value, onChange, label, size = 'sm' 
         <span>{value || '--:--'}</span>
       </button>
 
-      {open && (
+      {open && createPortal(
         <>
           <div className="clock-backdrop" onClick={() => setOpen(false)} />
-          <div className="clock-popover">
+          <div
+            className="clock-popover"
+            style={{ position: 'fixed', top: popoverPos.top, left: popoverPos.left, transform: 'translateX(-50%)' }}
+          >
             <div className="clock-header">
               <button
                 type="button"
@@ -236,7 +261,8 @@ const ClockTimePicker: React.FC<Props> = ({ value, onChange, label, size = 'sm' 
               <button type="button" className="btn btn-sm btn-primary" onClick={handleConfirm}>OK</button>
             </div>
           </div>
-        </>
+        </>,
+        document.body
       )}
     </div>
   );
