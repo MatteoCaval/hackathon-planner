@@ -388,7 +388,16 @@ const BudgetCalculator: React.FC<Props> = ({
                       <div key={flight.id} className="assignment-row">
                         <div>
                           <div className="fw-semibold">{flight.description || 'Unnamed flight'}</div>
-                          <div className="small subtle-text">{formatCurrency(flight.pricePerPerson)} per person</div>
+                          <div className="small subtle-text">
+                            {formatCurrency(flight.pricePerPerson)} per person
+                            {(flight.arrivalTime || flight.departureTime) && (
+                              <span className="ms-2">
+                                {flight.arrivalTime && <span>✈ arrives {flight.arrivalTime}</span>}
+                                {flight.arrivalTime && flight.departureTime && <span className="mx-1">·</span>}
+                                {flight.departureTime && <span>departs {flight.departureTime}</span>}
+                              </span>
+                            )}
+                          </div>
                         </div>
                         <Form.Control
                           type="number"
