@@ -90,16 +90,14 @@ const normalizeExtraCosts = (extraCosts: unknown): ExtraCost[] => {
     return [];
   }
 
-  return extraCosts
-    .map((extraCost) => {
-      const typedExtraCost = extraCost as LegacyExtraCost;
-      const description = typeof typedExtraCost.description === 'string' ? typedExtraCost.description : '';
-      const parsedValue = typedExtraCost.value;
-      const value = typeof parsedValue === 'number' && Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : 0;
+  return extraCosts.map((extraCost) => {
+    const typedExtraCost = extraCost as LegacyExtraCost;
+    const description = typeof typedExtraCost.description === 'string' ? typedExtraCost.description : '';
+    const parsedValue = typedExtraCost.value;
+    const value = typeof parsedValue === 'number' && Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : 0;
 
-      return { description, value };
-    })
-    .filter((extraCost) => extraCost.description.trim() || extraCost.value > 0);
+    return { description, value };
+  });
 };
 
 const hasInvalidExtraCosts = (extraCosts: unknown): boolean => {

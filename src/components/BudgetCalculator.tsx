@@ -452,7 +452,8 @@ const BudgetCalculator: React.FC<Props> = ({
                           type="number"
                           min="0"
                           step="10"
-                          value={extraCost.value}
+                          placeholder="0"
+                          value={extraCost.value || ''}
                           onChange={(e) => {
                             const parsedValue = Number(e.target.value);
                             handleExtraCostChange(index, { value: Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : 0 });
