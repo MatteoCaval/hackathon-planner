@@ -270,9 +270,6 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate, vot
       <header className="destination-header">
         <div>
           <h1 className="page-title mb-1">{destination.name}</h1>
-          <p className="subtle-text mb-0">
-            {destination.latitude.toFixed(4)}, {destination.longitude.toFixed(4)}
-          </p>
         </div>
 
         <div className="destination-header-stats">
