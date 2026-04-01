@@ -288,7 +288,8 @@ const AccommodationManager: React.FC<Props> = ({
         ...editForm,
         totalPrice: Number(editForm.totalPrice),
         rooms: editForm.rooms && editForm.rooms > 0 ? editForm.rooms : undefined,
-        beds: editForm.beds && editForm.beds > 0 ? editForm.beds : undefined
+        beds: editForm.beds && editForm.beds > 0 ? editForm.beds : undefined,
+        updatedAt: Date.now()
       } as Accommodation;
     });
 
@@ -481,6 +482,9 @@ const AccommodationManager: React.FC<Props> = ({
                 )}
                 {accommodation.createdAt && (
                   <span className="small subtle-text" title={new Date(accommodation.createdAt).toLocaleString()}>Added {formatTimeAgo(accommodation.createdAt)}</span>
+                )}
+                {accommodation.updatedAt && (
+                  <span className="small subtle-text" title={new Date(accommodation.updatedAt).toLocaleString()}>Updated {formatTimeAgo(accommodation.updatedAt)}</span>
                 )}
               </div>
             </div>

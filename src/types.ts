@@ -9,6 +9,7 @@ export interface Flight {
   origin: string;
   pricePerPerson: number;
   createdAt?: number;
+  updatedAt?: number;
 }
 
 export interface Accommodation {
@@ -20,6 +21,7 @@ export interface Accommodation {
   endDate: string;
   imageUrl?: string;
   createdAt?: number;
+  updatedAt?: number;
   rooms?: number;
   beds?: number;
 }

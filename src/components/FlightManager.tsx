@@ -208,7 +208,8 @@ const FlightManager: React.FC<Props> = ({
       return {
         ...flight,
         ...editForm,
-        pricePerPerson: Number(editForm.pricePerPerson)
+        pricePerPerson: Number(editForm.pricePerPerson),
+        updatedAt: Date.now()
       } as Flight;
     });
 
@@ -582,6 +583,9 @@ const FlightManager: React.FC<Props> = ({
                                     </a>
                                     {flight.createdAt && (
                                       <span className="small subtle-text" title={new Date(flight.createdAt).toLocaleString()}>Added {formatTimeAgo(flight.createdAt)}</span>
+                                    )}
+                                    {flight.updatedAt && (
+                                      <span className="small subtle-text" title={new Date(flight.updatedAt).toLocaleString()}>Updated {formatTimeAgo(flight.updatedAt)}</span>
                                     )}
                                   </div>
                                 </>

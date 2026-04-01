@@ -393,7 +393,8 @@ const normalizeFlightList = (flights: unknown): Flight[] => {
         arrivalTime: typeof typedFlight.arrivalTime === 'string' ? typedFlight.arrivalTime : '',
         origin: typeof typedFlight.origin === 'string' ? typedFlight.origin : '',
         pricePerPerson: parsedPrice !== null && parsedPrice >= 0 ? parsedPrice : 0,
-        ...(typeof typedFlight.createdAt === 'number' && Number.isFinite(typedFlight.createdAt) ? { createdAt: typedFlight.createdAt } : {})
+        ...(typeof typedFlight.createdAt === 'number' && Number.isFinite(typedFlight.createdAt) ? { createdAt: typedFlight.createdAt } : {}),
+        ...(typeof typedFlight.updatedAt === 'number' && Number.isFinite(typedFlight.updatedAt) ? { updatedAt: typedFlight.updatedAt } : {})
       };
     })
     .filter((flight): flight is Flight => flight !== null);
@@ -425,6 +426,7 @@ const normalizeAccommodationList = (accommodations: unknown): Accommodation[] =>
         totalPrice: parsedPrice !== null && parsedPrice >= 0 ? parsedPrice : 0,
         ...(typeof typedAccommodation.imageUrl === 'string' && typedAccommodation.imageUrl ? { imageUrl: typedAccommodation.imageUrl } : {}),
         ...(typeof typedAccommodation.createdAt === 'number' && Number.isFinite(typedAccommodation.createdAt) ? { createdAt: typedAccommodation.createdAt } : {}),
+        ...(typeof typedAccommodation.updatedAt === 'number' && Number.isFinite(typedAccommodation.updatedAt) ? { updatedAt: typedAccommodation.updatedAt } : {}),
         ...(typeof typedAccommodation.rooms === 'number' && Number.isFinite(typedAccommodation.rooms) && typedAccommodation.rooms > 0 ? { rooms: typedAccommodation.rooms } : {}),
         ...(typeof typedAccommodation.beds === 'number' && Number.isFinite(typedAccommodation.beds) && typedAccommodation.beds > 0 ? { beds: typedAccommodation.beds } : {})
       };
