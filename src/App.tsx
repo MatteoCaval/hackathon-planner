@@ -448,6 +448,8 @@ const normalizeDestinationCandidate = (candidate: unknown): Destination | null =
     return null;
   }
 
+  const customGroupLinks = normalizeCustomGroupLinks(parsed.customGroupLinks);
+
   const legacyDestination: LegacyDestination = {
     id: parsed.id,
     name: parsed.name,
@@ -459,7 +461,8 @@ const normalizeDestinationCandidate = (candidate: unknown): Destination | null =
     flightDraft: parsed.flightDraft,
     accommodationDraft: parsed.accommodationDraft,
     flights: normalizeFlightList(parsed.flights),
-    accommodations: normalizeAccommodationList(parsed.accommodations)
+    accommodations: normalizeAccommodationList(parsed.accommodations),
+    ...(customGroupLinks ? { customGroupLinks } : {})
   };
 
   return normalizeDestination(legacyDestination);
