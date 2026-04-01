@@ -8,6 +8,7 @@ export interface Flight {
   arrivalTime: string;
   origin: string;
   pricePerPerson: number;
+  createdAt?: number;
 }
 
 export interface Accommodation {
@@ -18,6 +19,9 @@ export interface Accommodation {
   startDate: string;
   endDate: string;
   imageUrl?: string;
+  createdAt?: number;
+  rooms?: number;
+  beds?: number;
 }
 
 export interface ExtraCost {
@@ -55,6 +59,7 @@ export interface Destination {
   accommodationDraft: Partial<Accommodation>;
   flights: Flight[];
   accommodations: Accommodation[];
+  customGroupLinks?: Record<string, Record<string, string>>;
 }
 
 export interface SearchLinkTemplate {

@@ -14,7 +14,10 @@ import {
   FaListUl,
   FaFilter,
   FaLayerGroup,
-  FaSearch
+  FaSearch,
+  FaTimes,
+  FaBed,
+  FaDoorOpen
 } from 'react-icons/fa';
 import { getUrlAutofill } from '../utils/urlAutofill';
 import DateRangePicker from './DateRangePicker';
@@ -34,6 +37,8 @@ interface Props {
   votes: Record<string, string[]>;
   currentPerson: string;
   onToggleVote: (accId: string) => void;
+  customGroupLinks: Record<string, Record<string, string>>;
+  onCustomGroupLinksChange: (links: Record<string, Record<string, string>>) => void;
 }
 
 interface AccommodationGroup {
@@ -54,8 +59,21 @@ interface ParsedBulkAccommodation {
   error: string;
 }
 
-type SortBy = 'price' | 'description' | 'startDate';
+type SortBy = 'price' | 'description' | 'startDate' | 'dateAdded';
 type ImageStatus = 'idle' | 'loading' | 'valid' | 'error';
+
+const formatTimeAgo = (timestamp: number): string => {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+};
 
 const validateImageUrl = (url: string): Promise<boolean> =>
   new Promise((resolve) => {
@@ -110,7 +128,9 @@ const AccommodationManager: React.FC<Props> = ({
   peopleCount,
   votes,
   currentPerson,
-  onToggleVote
+  onToggleVote,
+  customGroupLinks,
+  onCustomGroupLinksChange
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Accommodation>>({});
@@ -122,6 +142,8 @@ const AccommodationManager: React.FC<Props> = ({
   const [sortBy, setSortBy] = useState<SortBy>('price');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [groupByDate, setGroupByDate] = useState(true);
+
+  const [editingGroupLink, setEditingGroupLink] = useState<{ groupKey: string; linkId: string; url: string } | null>(null);
 
   const [draftImageStatus, setDraftImageStatus] = useState<ImageStatus>('idle');
   const [editImageStatus, setEditImageStatus] = useState<ImageStatus>('idle');
@@ -203,7 +225,10 @@ const AccommodationManager: React.FC<Props> = ({
       totalPrice: Number(draft.totalPrice),
       startDate: draft.startDate || '',
       endDate: draft.endDate || '',
-      ...(draft.imageUrl ? { imageUrl: draft.imageUrl } : {})
+      ...(draft.imageUrl ? { imageUrl: draft.imageUrl } : {}),
+      createdAt: Date.now(),
+      ...(draft.rooms && draft.rooms > 0 ? { rooms: draft.rooms } : {}),
+      beds: (draft.beds != null && draft.beds > 0) ? draft.beds : peopleCount
     };
 
     onChange([...accommodations, acc]);
@@ -227,7 +252,8 @@ const AccommodationManager: React.FC<Props> = ({
       {
         ...accommodation,
         id: uuidv4(),
-        description: accommodation.description ? `${accommodation.description} (Copy)` : 'Accommodation (Copy)'
+        description: accommodation.description ? `${accommodation.description} (Copy)` : 'Accommodation (Copy)',
+        createdAt: Date.now()
       }
     ]);
   };
@@ -260,7 +286,9 @@ const AccommodationManager: React.FC<Props> = ({
       return {
         ...accommodation,
         ...editForm,
-        totalPrice: Number(editForm.totalPrice)
+        totalPrice: Number(editForm.totalPrice),
+        rooms: editForm.rooms && editForm.rooms > 0 ? editForm.rooms : undefined,
+        beds: editForm.beds && editForm.beds > 0 ? editForm.beds : undefined
       } as Accommodation;
     });
 
@@ -308,7 +336,8 @@ const AccommodationManager: React.FC<Props> = ({
       totalPrice: row.totalPrice,
       link: row.link,
       startDate: row.startDate,
-      endDate: row.endDate
+      endDate: row.endDate,
+      createdAt: Date.now()
     }));
 
     onChange([...accommodations, ...importedAccommodations]);
@@ -340,6 +369,12 @@ const AccommodationManager: React.FC<Props> = ({
         const aDate = a.startDate || '9999-12-31';
         const bDate = b.startDate || '9999-12-31';
         return aDate.localeCompare(bDate) * direction;
+      }
+
+      if (sortBy === 'dateAdded') {
+        const aTime = a.createdAt ?? 0;
+        const bTime = b.createdAt ?? 0;
+        return (aTime - bTime) * direction;
       }
 
       return (a.description || '').localeCompare(b.description || '') * direction;
@@ -413,6 +448,10 @@ const AccommodationManager: React.FC<Props> = ({
                 <img src={editForm.imageUrl} alt="preview" style={{ marginTop: 6, width: 80, height: 56, objectFit: 'cover', borderRadius: 4 }} />
               )}
             </div>
+            <div className="d-flex gap-2">
+              <Form.Control size="sm" type="number" min="0" step="1" placeholder="Rooms" value={editForm.rooms ?? ''} onChange={(e) => setEditForm({ ...editForm, rooms: e.target.value === '' ? undefined : Number(e.target.value) })} style={{ width: 80 }} />
+              <Form.Control size="sm" type="number" min="0" step="1" placeholder="Beds" value={editForm.beds ?? ''} onChange={(e) => setEditForm({ ...editForm, beds: e.target.value === '' ? undefined : Number(e.target.value) })} style={{ width: 80 }} />
+            </div>
           </div>
         ) : (
           <div className="d-flex gap-2">
@@ -430,9 +469,20 @@ const AccommodationManager: React.FC<Props> = ({
               <div className="small subtle-text my-1">
                 {accommodation.startDate || 'No start date'} <span className="mx-1">to</span> {accommodation.endDate || 'No end date'}
               </div>
-              <a href={accommodation.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-inline-flex align-items-center gap-1">
-                View Stay <FaExternalLinkAlt size={10} />
-              </a>
+              <div className="d-flex flex-wrap align-items-center gap-2">
+                <a href={accommodation.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-inline-flex align-items-center gap-1">
+                  View Stay <FaExternalLinkAlt size={10} />
+                </a>
+                {accommodation.rooms != null && accommodation.rooms > 0 && (
+                  <span className="small subtle-text d-inline-flex align-items-center gap-1"><FaDoorOpen size={10} /> {accommodation.rooms} room{accommodation.rooms !== 1 ? 's' : ''}</span>
+                )}
+                {accommodation.beds != null && accommodation.beds > 0 && (
+                  <span className="small subtle-text d-inline-flex align-items-center gap-1"><FaBed size={10} /> {accommodation.beds} bed{accommodation.beds !== 1 ? 's' : ''}</span>
+                )}
+                {accommodation.createdAt && (
+                  <span className="small subtle-text" title={new Date(accommodation.createdAt).toLocaleString()}>Added {formatTimeAgo(accommodation.createdAt)}</span>
+                )}
+              </div>
             </div>
           </div>
         )}
@@ -571,6 +621,37 @@ const AccommodationManager: React.FC<Props> = ({
                 <img src={draft.imageUrl} alt="preview" style={{ marginTop: 6, width: 80, height: 56, objectFit: 'cover', borderRadius: 4 }} />
               )}
             </Form.Group>
+
+            <div className="d-flex gap-2">
+              <Form.Group style={{ flex: 1 }}>
+                <Form.Label className="small text-muted mb-1">Rooms</Form.Label>
+                <Form.Control
+                  size="sm"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="—"
+                  value={draft.rooms ?? ''}
+                  onChange={(e) => setDraftValue({ rooms: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  onKeyDown={handleQuickAddKeyDown}
+                  aria-label="Number of rooms"
+                />
+              </Form.Group>
+              <Form.Group style={{ flex: 1 }}>
+                <Form.Label className="small text-muted mb-1">Beds</Form.Label>
+                <Form.Control
+                  size="sm"
+                  type="number"
+                  min="0"
+                  step="1"
+                  placeholder="—"
+                  value={draft.beds ?? peopleCount}
+                  onChange={(e) => setDraftValue({ beds: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  onKeyDown={handleQuickAddKeyDown}
+                  aria-label="Number of beds"
+                />
+              </Form.Group>
+            </div>
           </div>
 
           {attemptedAdd && !isDraftLinkValid && (
@@ -630,6 +711,7 @@ const AccommodationManager: React.FC<Props> = ({
                   <option value="price">Price</option>
                   <option value="description">Name</option>
                   <option value="startDate">Start date</option>
+                  <option value="dateAdded">Date added</option>
                 </Form.Select>
               </Col>
               <Col md={2}>
@@ -665,6 +747,7 @@ const AccommodationManager: React.FC<Props> = ({
                 <>
                   {accGroups.map((group) => {
                     const groupSearchLinks = getAccommodationSearchLinks(searchLinks, destinationName, group.startDate, group.endDate, peopleCount);
+                    const groupCustomLinks = customGroupLinks[group.key] || {};
                     return (
                       <React.Fragment key={group.key}>
                         <tr className="table-light">
@@ -674,12 +757,88 @@ const AccommodationManager: React.FC<Props> = ({
                                 <strong>{group.label}</strong>
                                 <Badge bg="secondary" pill>{group.accommodations.length}</Badge>
                               </div>
-                              <div className="d-flex gap-2">
-                                {groupSearchLinks.map((sl) => (
-                                  <a key={sl.label} href={sl.url} target="_blank" rel="noreferrer" className="btn btn-outline-warning btn-sm d-inline-flex align-items-center gap-1" title="Link may not pre-fill correctly — work in progress">
-                                    <FaSearch size={10} /> {sl.label} (beta)
-                                  </a>
-                                ))}
+                              <div className="d-flex flex-wrap gap-2 align-items-center">
+                                {groupSearchLinks.map((sl) => {
+                                  const linkId = searchLinks.find((t) => t.label === sl.label)?.id || sl.label;
+                                  const customUrl = groupCustomLinks[linkId];
+                                  const isEditing = editingGroupLink?.groupKey === group.key && editingGroupLink?.linkId === linkId;
+
+                                  if (isEditing) {
+                                    return (
+                                      <InputGroup key={sl.label} size="sm" style={{ width: 320 }}>
+                                        <Form.Control
+                                          size="sm"
+                                          placeholder={`Custom ${sl.label} URL`}
+                                          value={editingGroupLink.url}
+                                          onChange={(e) => setEditingGroupLink({ ...editingGroupLink, url: e.target.value })}
+                                          onKeyDown={(e) => {
+                                            if (e.key === 'Enter') {
+                                              const url = editingGroupLink.url.trim();
+                                              const next = { ...customGroupLinks };
+                                              if (url) {
+                                                next[group.key] = { ...groupCustomLinks, [linkId]: url };
+                                              } else {
+                                                const { [linkId]: _, ...rest } = groupCustomLinks;
+                                                if (Object.keys(rest).length > 0) {
+                                                  next[group.key] = rest;
+                                                } else {
+                                                  delete next[group.key];
+                                                }
+                                              }
+                                              onCustomGroupLinksChange(next);
+                                              setEditingGroupLink(null);
+                                            } else if (e.key === 'Escape') {
+                                              setEditingGroupLink(null);
+                                            }
+                                          }}
+                                          autoFocus
+                                        />
+                                        <Button
+                                          variant="outline-success"
+                                          size="sm"
+                                          title="Save"
+                                          onClick={() => {
+                                            const url = editingGroupLink.url.trim();
+                                            const next = { ...customGroupLinks };
+                                            if (url) {
+                                              next[group.key] = { ...groupCustomLinks, [linkId]: url };
+                                            } else {
+                                              const { [linkId]: _, ...rest } = groupCustomLinks;
+                                              if (Object.keys(rest).length > 0) {
+                                                next[group.key] = rest;
+                                              } else {
+                                                delete next[group.key];
+                                              }
+                                            }
+                                            onCustomGroupLinksChange(next);
+                                            setEditingGroupLink(null);
+                                          }}
+                                        >
+                                          <FaSave size={10} />
+                                        </Button>
+                                        <Button variant="outline-secondary" size="sm" title="Cancel" onClick={() => setEditingGroupLink(null)}>
+                                          <FaTimes size={10} />
+                                        </Button>
+                                      </InputGroup>
+                                    );
+                                  }
+
+                                  return (
+                                    <div key={sl.label} className="btn-group btn-group-sm">
+                                      <a href={customUrl || sl.url} target="_blank" rel="noreferrer" className="btn btn-outline-warning d-inline-flex align-items-center gap-1" title={customUrl ? 'Custom link' : 'Auto-generated link'}>
+                                        <FaSearch size={10} /> {sl.label}{customUrl ? '' : ' (auto)'}
+                                      </a>
+                                      <button
+                                        type="button"
+                                        className="btn btn-outline-warning"
+                                        title="Edit link"
+                                        onClick={() => setEditingGroupLink({ groupKey: group.key, linkId, url: customUrl || sl.url })}
+                                      >
+                                        <FaEdit size={10} />
+                                      </button>
+                                    </div>
+                                  );
+                                })}
                                 <Button size="sm" variant="outline-secondary" onClick={() => prefillDraftFromGroup(group.startDate, group.endDate)}>
                                   <FaPlus className="me-1" /> Add another
                                 </Button>

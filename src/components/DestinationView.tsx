@@ -196,6 +196,13 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate, vot
     }));
   };
 
+  const handleCustomGroupLinksChange = (customGroupLinks: Record<string, Record<string, string>>) => {
+    commitUpdate((currentDestination) => ({
+      ...currentDestination,
+      customGroupLinks: Object.keys(customGroupLinks).length > 0 ? customGroupLinks : undefined
+    }));
+  };
+
   const handleAttemptsChange = (attempts: BudgetAttempt[]) => {
     const nextAttempts = attempts.slice(0, 1);
     commitUpdate((currentDestination) => ({
@@ -450,6 +457,8 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate, vot
             votes={votes.accommodations}
             currentPerson={currentPerson}
             onToggleVote={(accId) => onToggleVote('accommodations', accId)}
+            customGroupLinks={destination.customGroupLinks || {}}
+            onCustomGroupLinksChange={handleCustomGroupLinksChange}
           />
         </section>
       )}

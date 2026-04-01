@@ -53,7 +53,20 @@ interface ParsedBulkFlight {
   error: string;
 }
 
-type SortBy = 'price' | 'description' | 'startDate';
+type SortBy = 'price' | 'description' | 'startDate' | 'dateAdded';
+
+const formatTimeAgo = (timestamp: number): string => {
+  const seconds = Math.floor((Date.now() - timestamp) / 1000);
+  if (seconds < 60) return 'just now';
+  const minutes = Math.floor(seconds / 60);
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+};
 
 const parseBulkFlights = (bulkInput: string): ParsedBulkFlight[] => {
   return bulkInput
@@ -141,7 +154,8 @@ const FlightManager: React.FC<Props> = ({
       departureTime: draft.departureTime || '',
       arrivalTime: draft.arrivalTime || '',
       origin: draft.origin || 'Dublin',
-      pricePerPerson: Number(draft.pricePerPerson)
+      pricePerPerson: Number(draft.pricePerPerson),
+      createdAt: Date.now()
     };
 
     onChange([...flights, flight]);
@@ -166,6 +180,7 @@ const FlightManager: React.FC<Props> = ({
         ...flight,
         id: uuidv4(),
         description: flight.description ? `${flight.description} (Copy)` : 'Flight Option (Copy)',
+        createdAt: Date.now()
       }
     ]);
   };
@@ -244,7 +259,8 @@ const FlightManager: React.FC<Props> = ({
       endDate: row.endDate,
       departureTime: '',
       arrivalTime: '',
-      origin: ''
+      origin: '',
+      createdAt: Date.now()
     }));
 
     onChange([...flights, ...importedFlights]);
@@ -276,6 +292,12 @@ const FlightManager: React.FC<Props> = ({
         const aDate = a.startDate || '9999-12-31';
         const bDate = b.startDate || '9999-12-31';
         return aDate.localeCompare(bDate) * direction;
+      }
+
+      if (sortBy === 'dateAdded') {
+        const aTime = a.createdAt ?? 0;
+        const bTime = b.createdAt ?? 0;
+        return (aTime - bTime) * direction;
       }
 
       return (a.description || '').localeCompare(b.description || '') * direction;
@@ -457,6 +479,7 @@ const FlightManager: React.FC<Props> = ({
                   <option value="price">Price</option>
                   <option value="description">Name</option>
                   <option value="startDate">Start date</option>
+                  <option value="dateAdded">Date added</option>
                 </Form.Select>
               </Col>
               <Col md={2}>
@@ -553,9 +576,14 @@ const FlightManager: React.FC<Props> = ({
                                     {flight.arrivalTime && flight.departureTime && ' · '}
                                     {flight.departureTime && `Departs at ${flight.departureTime}`}
                                   </div>
-                                  <a href={flight.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-inline-flex align-items-center gap-1">
-                                    View Deal <FaExternalLinkAlt size={10} />
-                                  </a>
+                                  <div className="d-flex flex-wrap align-items-center gap-2">
+                                    <a href={flight.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-inline-flex align-items-center gap-1">
+                                      View Deal <FaExternalLinkAlt size={10} />
+                                    </a>
+                                    {flight.createdAt && (
+                                      <span className="small subtle-text" title={new Date(flight.createdAt).toLocaleString()}>Added {formatTimeAgo(flight.createdAt)}</span>
+                                    )}
+                                  </div>
                                 </>
                               )}
                             </td>
@@ -623,9 +651,14 @@ const FlightManager: React.FC<Props> = ({
                             {flight.endDate || 'No end date'}
                             {flight.departureTime && ` (departs ${flight.departureTime})`}
                           </div>
-                          <a href={flight.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-inline-flex align-items-center gap-1">
-                            View Deal <FaExternalLinkAlt size={10} />
-                          </a>
+                          <div className="d-flex flex-wrap align-items-center gap-2">
+                            <a href={flight.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-inline-flex align-items-center gap-1">
+                              View Deal <FaExternalLinkAlt size={10} />
+                            </a>
+                            {flight.createdAt && (
+                              <span className="small subtle-text" title={new Date(flight.createdAt).toLocaleString()}>Added {formatTimeAgo(flight.createdAt)}</span>
+                            )}
+                          </div>
                         </>
                       )}
                     </td>

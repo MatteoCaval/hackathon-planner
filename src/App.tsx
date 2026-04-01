@@ -280,6 +280,12 @@ const normalizeAccommodationDraft = (accommodationDraft: unknown): Partial<Accom
     normalizedDraft.totalPrice = typedDraft.totalPrice;
   }
   if (typeof typedDraft.imageUrl === 'string') normalizedDraft.imageUrl = typedDraft.imageUrl;
+  if (typeof typedDraft.rooms === 'number' && Number.isFinite(typedDraft.rooms) && typedDraft.rooms > 0) {
+    normalizedDraft.rooms = typedDraft.rooms;
+  }
+  if (typeof typedDraft.beds === 'number' && Number.isFinite(typedDraft.beds) && typedDraft.beds > 0) {
+    normalizedDraft.beds = typedDraft.beds;
+  }
 
   return normalizedDraft;
 };
@@ -311,11 +317,28 @@ const hasInvalidAccommodationDraft = (accommodationDraft: unknown): boolean => {
     if (key === 'totalPrice') {
       return typeof value !== 'number' || !Number.isFinite(value) || value < 0;
     }
+    if (key === 'rooms' || key === 'beds') {
+      return typeof value !== 'number' || !Number.isFinite(value) || value < 0;
+    }
     if (key === 'link' || key === 'description' || key === 'startDate' || key === 'endDate' || key === 'imageUrl') {
       return typeof value !== 'string';
     }
     return true;
   });
+};
+
+const normalizeCustomGroupLinks = (raw: unknown): Record<string, Record<string, string>> | undefined => {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return undefined;
+  const result: Record<string, Record<string, string>> = {};
+  for (const [groupKey, inner] of Object.entries(raw as Record<string, unknown>)) {
+    if (!inner || typeof inner !== 'object' || Array.isArray(inner)) continue;
+    const links: Record<string, string> = {};
+    for (const [linkId, url] of Object.entries(inner as Record<string, unknown>)) {
+      if (typeof url === 'string' && url.trim()) links[linkId] = url;
+    }
+    if (Object.keys(links).length > 0) result[groupKey] = links;
+  }
+  return Object.keys(result).length > 0 ? result : undefined;
 };
 
 const normalizeDestination = (destination: LegacyDestination): Destination => ({
@@ -324,7 +347,10 @@ const normalizeDestination = (destination: LegacyDestination): Destination => ({
   extraCosts: normalizeExtraCosts(destination.extraCosts),
   budgetEstimator: normalizeBudgetEstimator(destination.budgetEstimator),
   flightDraft: normalizeFlightDraft(destination.flightDraft),
-  accommodationDraft: normalizeAccommodationDraft(destination.accommodationDraft)
+  accommodationDraft: normalizeAccommodationDraft(destination.accommodationDraft),
+  ...(normalizeCustomGroupLinks((destination as Record<string, unknown>).customGroupLinks)
+    ? { customGroupLinks: normalizeCustomGroupLinks((destination as Record<string, unknown>).customGroupLinks) }
+    : {})
 });
 
 const parseNumberValue = (value: unknown): number | null => {
@@ -366,7 +392,8 @@ const normalizeFlightList = (flights: unknown): Flight[] => {
         departureTime: typeof typedFlight.departureTime === 'string' ? typedFlight.departureTime : '',
         arrivalTime: typeof typedFlight.arrivalTime === 'string' ? typedFlight.arrivalTime : '',
         origin: typeof typedFlight.origin === 'string' ? typedFlight.origin : '',
-        pricePerPerson: parsedPrice !== null && parsedPrice >= 0 ? parsedPrice : 0
+        pricePerPerson: parsedPrice !== null && parsedPrice >= 0 ? parsedPrice : 0,
+        ...(typeof typedFlight.createdAt === 'number' && Number.isFinite(typedFlight.createdAt) ? { createdAt: typedFlight.createdAt } : {})
       };
     })
     .filter((flight): flight is Flight => flight !== null);
@@ -396,7 +423,10 @@ const normalizeAccommodationList = (accommodations: unknown): Accommodation[] =>
         startDate: typeof typedAccommodation.startDate === 'string' ? typedAccommodation.startDate : '',
         endDate: typeof typedAccommodation.endDate === 'string' ? typedAccommodation.endDate : '',
         totalPrice: parsedPrice !== null && parsedPrice >= 0 ? parsedPrice : 0,
-        ...(typeof typedAccommodation.imageUrl === 'string' && typedAccommodation.imageUrl ? { imageUrl: typedAccommodation.imageUrl } : {})
+        ...(typeof typedAccommodation.imageUrl === 'string' && typedAccommodation.imageUrl ? { imageUrl: typedAccommodation.imageUrl } : {}),
+        ...(typeof typedAccommodation.createdAt === 'number' && Number.isFinite(typedAccommodation.createdAt) ? { createdAt: typedAccommodation.createdAt } : {}),
+        ...(typeof typedAccommodation.rooms === 'number' && Number.isFinite(typedAccommodation.rooms) && typedAccommodation.rooms > 0 ? { rooms: typedAccommodation.rooms } : {}),
+        ...(typeof typedAccommodation.beds === 'number' && Number.isFinite(typedAccommodation.beds) && typedAccommodation.beds > 0 ? { beds: typedAccommodation.beds } : {})
       };
     })
     .filter((accommodation): accommodation is Accommodation => accommodation !== null);
