@@ -203,6 +203,13 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate, vot
     }));
   };
 
+  const handleStayLinksChange = (stayLinks: { label: string; url: string }[]) => {
+    commitUpdate((currentDestination) => ({
+      ...currentDestination,
+      stayLinks: stayLinks.length > 0 ? stayLinks : undefined
+    }));
+  };
+
   const handleAttemptsChange = (attempts: BudgetAttempt[]) => {
     const nextAttempts = attempts.slice(0, 1);
     commitUpdate((currentDestination) => ({
@@ -459,6 +466,8 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate, vot
             onToggleVote={(accId) => onToggleVote('accommodations', accId)}
             customGroupLinks={destination.customGroupLinks || {}}
             onCustomGroupLinksChange={handleCustomGroupLinksChange}
+            stayLinks={destination.stayLinks || []}
+            onStayLinksChange={handleStayLinksChange}
           />
         </section>
       )}

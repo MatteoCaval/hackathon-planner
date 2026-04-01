@@ -17,7 +17,8 @@ import {
   FaSearch,
   FaTimes,
   FaBed,
-  FaDoorOpen
+  FaDoorOpen,
+  FaLink
 } from 'react-icons/fa';
 import { getUrlAutofill } from '../utils/urlAutofill';
 import DateRangePicker from './DateRangePicker';
@@ -39,6 +40,8 @@ interface Props {
   onToggleVote: (accId: string) => void;
   customGroupLinks: Record<string, Record<string, string>>;
   onCustomGroupLinksChange: (links: Record<string, Record<string, string>>) => void;
+  stayLinks: { label: string; url: string }[];
+  onStayLinksChange: (links: { label: string; url: string }[]) => void;
 }
 
 interface AccommodationGroup {
@@ -130,7 +133,9 @@ const AccommodationManager: React.FC<Props> = ({
   currentPerson,
   onToggleVote,
   customGroupLinks,
-  onCustomGroupLinksChange
+  onCustomGroupLinksChange,
+  stayLinks,
+  onStayLinksChange
 }) => {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Accommodation>>({});
@@ -144,6 +149,10 @@ const AccommodationManager: React.FC<Props> = ({
   const [groupByDate, setGroupByDate] = useState(true);
 
   const [editingGroupLink, setEditingGroupLink] = useState<{ groupKey: string; linkId: string; url: string } | null>(null);
+  const [showAddStayLink, setShowAddStayLink] = useState(false);
+  const [newStayLink, setNewStayLink] = useState({ label: '', url: '' });
+  const [editingStayLinkIndex, setEditingStayLinkIndex] = useState<number | null>(null);
+  const [editStayLink, setEditStayLink] = useState({ label: '', url: '' });
 
   const [draftImageStatus, setDraftImageStatus] = useState<ImageStatus>('idle');
   const [editImageStatus, setEditImageStatus] = useState<ImageStatus>('idle');
@@ -531,7 +540,92 @@ const AccommodationManager: React.FC<Props> = ({
             </Button>
           </div>
 
-          <div className="subtle-text mb-2">Quick add (Enter to save, Cmd/Ctrl + Enter to save and keep typing).</div>
+          {(stayLinks.length > 0 || showAddStayLink) && (
+            <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
+              {stayLinks.map((sl, i) => (
+                editingStayLinkIndex === i ? (
+                  <InputGroup key={i} size="sm" style={{ width: 360 }}>
+                    <Form.Control size="sm" placeholder="Label" value={editStayLink.label} onChange={(e) => setEditStayLink({ ...editStayLink, label: e.target.value })} style={{ maxWidth: 100 }} />
+                    <Form.Control
+                      size="sm"
+                      placeholder="URL"
+                      value={editStayLink.url}
+                      onChange={(e) => setEditStayLink({ ...editStayLink, url: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && editStayLink.label.trim() && editStayLink.url.trim()) {
+                          const next = [...stayLinks];
+                          next[i] = { label: editStayLink.label.trim(), url: editStayLink.url.trim() };
+                          onStayLinksChange(next);
+                          setEditingStayLinkIndex(null);
+                        } else if (e.key === 'Escape') {
+                          setEditingStayLinkIndex(null);
+                        }
+                      }}
+                    />
+                    <Button variant="outline-success" size="sm" onClick={() => {
+                      if (editStayLink.label.trim() && editStayLink.url.trim()) {
+                        const next = [...stayLinks];
+                        next[i] = { label: editStayLink.label.trim(), url: editStayLink.url.trim() };
+                        onStayLinksChange(next);
+                        setEditingStayLinkIndex(null);
+                      }
+                    }}><FaSave size={10} /></Button>
+                    <Button variant="outline-danger" size="sm" onClick={() => {
+                      onStayLinksChange(stayLinks.filter((_, j) => j !== i));
+                      setEditingStayLinkIndex(null);
+                    }}><FaTrash size={10} /></Button>
+                    <Button variant="outline-secondary" size="sm" onClick={() => setEditingStayLinkIndex(null)}><FaTimes size={10} /></Button>
+                  </InputGroup>
+                ) : (
+                  <div key={i} className="btn-group btn-group-sm">
+                    <a href={sl.url} target="_blank" rel="noreferrer" className="btn btn-outline-info d-inline-flex align-items-center gap-1">
+                      <FaLink size={10} /> {sl.label}
+                    </a>
+                    <button type="button" className="btn btn-outline-info" title="Edit link" onClick={() => { setEditingStayLinkIndex(i); setEditStayLink(sl); }}>
+                      <FaEdit size={10} />
+                    </button>
+                  </div>
+                )
+              ))}
+              {showAddStayLink && (
+                <InputGroup size="sm" style={{ width: 360 }}>
+                  <Form.Control size="sm" placeholder="Label" value={newStayLink.label} onChange={(e) => setNewStayLink({ ...newStayLink, label: e.target.value })} style={{ maxWidth: 100 }} autoFocus />
+                  <Form.Control
+                    size="sm"
+                    placeholder="URL"
+                    value={newStayLink.url}
+                    onChange={(e) => setNewStayLink({ ...newStayLink, url: e.target.value })}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && newStayLink.label.trim() && newStayLink.url.trim()) {
+                        onStayLinksChange([...stayLinks, { label: newStayLink.label.trim(), url: newStayLink.url.trim() }]);
+                        setNewStayLink({ label: '', url: '' });
+                        setShowAddStayLink(false);
+                      } else if (e.key === 'Escape') {
+                        setShowAddStayLink(false);
+                        setNewStayLink({ label: '', url: '' });
+                      }
+                    }}
+                  />
+                  <Button variant="outline-success" size="sm" onClick={() => {
+                    if (newStayLink.label.trim() && newStayLink.url.trim()) {
+                      onStayLinksChange([...stayLinks, { label: newStayLink.label.trim(), url: newStayLink.url.trim() }]);
+                      setNewStayLink({ label: '', url: '' });
+                      setShowAddStayLink(false);
+                    }
+                  }}><FaSave size={10} /></Button>
+                  <Button variant="outline-secondary" size="sm" onClick={() => { setShowAddStayLink(false); setNewStayLink({ label: '', url: '' }); }}><FaTimes size={10} /></Button>
+                </InputGroup>
+              )}
+            </div>
+          )}
+          <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
+            <span className="subtle-text">Quick add (Enter to save, Cmd/Ctrl + Enter to save and keep typing).</span>
+            {!showAddStayLink && (
+              <Button size="sm" variant="outline-info" className="d-inline-flex align-items-center gap-1" onClick={() => setShowAddStayLink(true)}>
+                <FaPlus size={10} /> <FaLink size={10} /> Add list
+              </Button>
+            )}
+          </div>
           <div className="manager-quick-add-grid">
             <Form.Group>
               <Form.Label className="small text-muted mb-1">Description</Form.Label>

@@ -62,6 +62,7 @@ export interface Destination {
   flights: Flight[];
   accommodations: Accommodation[];
   customGroupLinks?: Record<string, Record<string, string>>;
+  stayLinks?: { label: string; url: string }[];
 }
 
 export interface SearchLinkTemplate {

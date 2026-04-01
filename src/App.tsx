@@ -341,6 +341,15 @@ const normalizeCustomGroupLinks = (raw: unknown): Record<string, Record<string, 
   return Object.keys(result).length > 0 ? result : undefined;
 };
 
+const normalizeStayLinks = (raw: unknown): { label: string; url: string }[] | undefined => {
+  if (!Array.isArray(raw)) return undefined;
+  const result = raw
+    .filter((item): item is Record<string, unknown> => item && typeof item === 'object' && !Array.isArray(item))
+    .filter((item) => typeof item.label === 'string' && item.label.trim() && typeof item.url === 'string' && item.url.trim())
+    .map((item) => ({ label: item.label as string, url: item.url as string }));
+  return result.length > 0 ? result : undefined;
+};
+
 const normalizeDestination = (destination: LegacyDestination): Destination => ({
   ...destination,
   notes: typeof destination.notes === 'string' ? destination.notes : '',
@@ -350,6 +359,9 @@ const normalizeDestination = (destination: LegacyDestination): Destination => ({
   accommodationDraft: normalizeAccommodationDraft(destination.accommodationDraft),
   ...(normalizeCustomGroupLinks((destination as Record<string, unknown>).customGroupLinks)
     ? { customGroupLinks: normalizeCustomGroupLinks((destination as Record<string, unknown>).customGroupLinks) }
+    : {}),
+  ...(normalizeStayLinks((destination as Record<string, unknown>).stayLinks)
+    ? { stayLinks: normalizeStayLinks((destination as Record<string, unknown>).stayLinks) }
     : {})
 });
 
@@ -451,6 +463,7 @@ const normalizeDestinationCandidate = (candidate: unknown): Destination | null =
   }
 
   const customGroupLinks = normalizeCustomGroupLinks(parsed.customGroupLinks);
+  const stayLinks = normalizeStayLinks(parsed.stayLinks);
 
   const legacyDestination: LegacyDestination = {
     id: parsed.id,
@@ -464,7 +477,8 @@ const normalizeDestinationCandidate = (candidate: unknown): Destination | null =
     accommodationDraft: parsed.accommodationDraft,
     flights: normalizeFlightList(parsed.flights),
     accommodations: normalizeAccommodationList(parsed.accommodations),
-    ...(customGroupLinks ? { customGroupLinks } : {})
+    ...(customGroupLinks ? { customGroupLinks } : {}),
+    ...(stayLinks ? { stayLinks } : {})
   };
 
   return normalizeDestination(legacyDestination);
