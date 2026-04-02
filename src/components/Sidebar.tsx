@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
-import { Nav, Button, Form } from 'react-bootstrap';
+import { Nav, Button, Form, Modal } from 'react-bootstrap';
 import { Destination } from '../types';
-import { FaMapMarkerAlt, FaPlus, FaTrash, FaSearch } from 'react-icons/fa';
+import { FaMapMarkerAlt, FaPlus, FaTrash, FaSearch, FaExclamationTriangle } from 'react-icons/fa';
 import VoteButton from './VoteButton';
 
 interface Props {
@@ -17,6 +17,7 @@ interface Props {
 
 const Sidebar: React.FC<Props> = ({ destinations, activeId, onSelect, onAddClick, onRemove, votes, currentPerson, onToggleVote }) => {
   const [searchQuery, setSearchQuery] = useState('');
+  const [pendingRemove, setPendingRemove] = useState<{ id: string; name: string } | null>(null);
 
   const filteredDestinations = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
@@ -76,7 +77,7 @@ const Sidebar: React.FC<Props> = ({ destinations, activeId, onSelect, onAddClick
                   className="nav-item-remove"
                   onClick={(e) => {
                     e.stopPropagation();
-                    onRemove(destination.id);
+                    setPendingRemove({ id: destination.id, name: destination.name });
                   }}
                   aria-label={`Remove destination ${destination.name}`}
                   title="Remove destination"
@@ -107,6 +108,35 @@ const Sidebar: React.FC<Props> = ({ destinations, activeId, onSelect, onAddClick
           <FaPlus /> Add Destination
         </Button>
       </div>
+
+      <Modal show={pendingRemove !== null} onHide={() => setPendingRemove(null)} centered size="sm">
+        <Modal.Body className="text-center py-4">
+          <div className="mb-3">
+            <FaExclamationTriangle size={32} className="text-danger" />
+          </div>
+          <h5 className="fw-semibold mb-2">Remove destination?</h5>
+          <p className="text-muted mb-0">
+            <strong>{pendingRemove?.name}</strong> and all its flights, stays and budget data will be permanently deleted.
+          </p>
+        </Modal.Body>
+        <Modal.Footer className="justify-content-center border-0 pt-0 pb-3 gap-2">
+          <Button variant="outline-secondary" size="sm" onClick={() => setPendingRemove(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() => {
+              if (pendingRemove) {
+                onRemove(pendingRemove.id);
+                setPendingRemove(null);
+              }
+            }}
+          >
+            <FaTrash className="me-1" /> Remove
+          </Button>
+        </Modal.Footer>
+      </Modal>
     </aside>
   );
 };
