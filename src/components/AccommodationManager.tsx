@@ -18,7 +18,8 @@ import {
   FaTimes,
   FaBed,
   FaDoorOpen,
-  FaLink
+  FaLink,
+  FaExclamationTriangle
 } from 'react-icons/fa';
 import { getUrlAutofill } from '../utils/urlAutofill';
 import DateRangePicker from './DateRangePicker';
@@ -147,6 +148,7 @@ const AccommodationManager: React.FC<Props> = ({
   const [sortBy, setSortBy] = useState<SortBy>('price');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [groupByDate, setGroupByDate] = useState(true);
+  const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
 
   const [editingGroupLink, setEditingGroupLink] = useState<{ groupKey: string; linkId: string; url: string } | null>(null);
   const [showAddStayLink, setShowAddStayLink] = useState(false);
@@ -535,9 +537,16 @@ const AccommodationManager: React.FC<Props> = ({
               <h2 className="workspace-card-title m-0">Accommodation Options</h2>
               <Badge bg="light" text="dark">{accommodations.length}</Badge>
             </div>
-            <Button size="sm" variant="outline-secondary" onClick={() => setShowBulkModal(true)}>
-              <FaListUl className="me-1" /> Bulk Add
-            </Button>
+            <div className="d-flex align-items-center gap-2">
+              {accommodations.length > 0 && (
+                <Button size="sm" variant="outline-danger" onClick={() => setShowClearAllConfirm(true)}>
+                  <FaTrash className="me-1" /> Clear All
+                </Button>
+              )}
+              <Button size="sm" variant="outline-secondary" onClick={() => setShowBulkModal(true)}>
+                <FaListUl className="me-1" /> Bulk Add
+              </Button>
+            </div>
           </div>
 
           {(stayLinks.length > 0 || showAddStayLink) && (
@@ -1023,6 +1032,22 @@ const AccommodationManager: React.FC<Props> = ({
           <Button variant="primary" onClick={handleBulkImport} disabled={validBulkAccommodations.length === 0}>
             Import {validBulkAccommodations.length > 0 ? validBulkAccommodations.length : ''} Accommodations
           </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal show={showClearAllConfirm} onHide={() => setShowClearAllConfirm(false)} centered size="sm">
+        <Modal.Body className="text-center py-4">
+          <div className="mb-3">
+            <FaExclamationTriangle size={32} className="text-danger" />
+          </div>
+          <h5 className="fw-semibold mb-2">Clear all accommodations?</h5>
+          <p className="text-muted mb-0">
+            All <strong>{accommodations.length}</strong> accommodation{accommodations.length !== 1 ? 's' : ''} will be permanently removed.
+          </p>
+        </Modal.Body>
+        <Modal.Footer className="justify-content-center border-0 pt-0 pb-3 gap-2">
+          <Button variant="outline-secondary" size="sm" onClick={() => setShowClearAllConfirm(false)}>Cancel</Button>
+          <Button variant="danger" size="sm" onClick={() => { onChange([]); setShowClearAllConfirm(false); }}>Clear All</Button>
         </Modal.Footer>
       </Modal>
     </>

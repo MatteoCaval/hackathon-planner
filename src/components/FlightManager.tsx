@@ -14,7 +14,8 @@ import {
   FaListUl,
   FaFilter,
   FaLayerGroup,
-  FaSearch
+  FaSearch,
+  FaExclamationTriangle
 } from 'react-icons/fa';
 import { getUrlAutofill } from '../utils/urlAutofill';
 import DateRangePicker from './DateRangePicker';
@@ -122,6 +123,7 @@ const FlightManager: React.FC<Props> = ({
   const [sortBy, setSortBy] = useState<SortBy>('price');
   const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
   const [groupByDate, setGroupByDate] = useState(true);
+  const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
 
   const quickAddDescriptionRef = React.useRef<HTMLInputElement>(null);
   const quickAddPriceRef = React.useRef<HTMLInputElement>(null);
@@ -349,9 +351,16 @@ const FlightManager: React.FC<Props> = ({
               <h2 className="workspace-card-title m-0">Flight Options</h2>
               <Badge bg="light" text="dark">{flights.length}</Badge>
             </div>
-            <Button size="sm" variant="outline-secondary" onClick={() => setShowBulkModal(true)}>
-              <FaListUl className="me-1" /> Bulk Add
-            </Button>
+            <div className="d-flex align-items-center gap-2">
+              {flights.length > 0 && (
+                <Button size="sm" variant="outline-danger" onClick={() => setShowClearAllConfirm(true)}>
+                  <FaTrash className="me-1" /> Clear All
+                </Button>
+              )}
+              <Button size="sm" variant="outline-secondary" onClick={() => setShowBulkModal(true)}>
+                <FaListUl className="me-1" /> Bulk Add
+              </Button>
+            </div>
           </div>
 
           <div className="subtle-text mb-2">Quick add (Enter to save, Cmd/Ctrl + Enter to save and keep typing).</div>
@@ -762,6 +771,22 @@ const FlightManager: React.FC<Props> = ({
           <Button variant="primary" onClick={handleBulkImport} disabled={validBulkFlights.length === 0}>
             Import {validBulkFlights.length > 0 ? validBulkFlights.length : ''} Flights
           </Button>
+        </Modal.Footer>
+      </Modal>
+
+      <Modal show={showClearAllConfirm} onHide={() => setShowClearAllConfirm(false)} centered size="sm">
+        <Modal.Body className="text-center py-4">
+          <div className="mb-3">
+            <FaExclamationTriangle size={32} className="text-danger" />
+          </div>
+          <h5 className="fw-semibold mb-2">Clear all flights?</h5>
+          <p className="text-muted mb-0">
+            All <strong>{flights.length}</strong> flight{flights.length !== 1 ? 's' : ''} will be permanently removed.
+          </p>
+        </Modal.Body>
+        <Modal.Footer className="justify-content-center border-0 pt-0 pb-3 gap-2">
+          <Button variant="outline-secondary" size="sm" onClick={() => setShowClearAllConfirm(false)}>Cancel</Button>
+          <Button variant="danger" size="sm" onClick={() => { onChange([]); setShowClearAllConfirm(false); }}>Clear All</Button>
         </Modal.Footer>
       </Modal>
     </>
