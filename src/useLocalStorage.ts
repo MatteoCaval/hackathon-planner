@@ -1,7 +1,6 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 
 export function useLocalStorage<T>(key: string, initialValue: T) {
-  // Get from local storage then parse it to the type or return initialValue
   const [storedValue, setStoredValue] = useState<T>(() => {
     try {
       const item = window.localStorage.getItem(key);
@@ -12,12 +11,23 @@ export function useLocalStorage<T>(key: string, initialValue: T) {
     }
   });
 
-  // Return a wrapped version of useState's setter function that ...
-  // ... persists the new value to localStorage.
+  // Sync across tabs via the storage event
+  useEffect(() => {
+    const handleStorage = (e: StorageEvent) => {
+      if (e.key !== key) return;
+      try {
+        setStoredValue(e.newValue ? JSON.parse(e.newValue) : initialValue);
+      } catch {
+        // Ignore malformed values from other tabs
+      }
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, [key, initialValue]);
+
   const setValue = (value: T | ((val: T) => T)) => {
     try {
       setStoredValue((previousValue) => {
-        // Allow value to be a function so we have same API as useState.
         const valueToStore = value instanceof Function ? value(previousValue) : value;
         window.localStorage.setItem(key, JSON.stringify(valueToStore));
         return valueToStore;

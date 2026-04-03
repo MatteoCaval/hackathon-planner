@@ -83,9 +83,9 @@ const AccommodationDropdown: React.FC<{
 
       {open && (
         <div style={{
-          position: 'absolute', zIndex: 1000, width: '100%', top: 'calc(100% + 4px)',
+          position: 'absolute', zIndex: 'var(--z-dropdown)' as unknown as number, width: '100%', top: 'calc(100% + 4px)',
           background: 'var(--bs-body-bg)', border: '1px solid var(--bs-border-color)',
-          borderRadius: 6, boxShadow: '0 4px 12px rgba(0,0,0,0.15)', maxHeight: 260, overflowY: 'auto'
+          borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', maxHeight: 260, overflowY: 'auto'
         }}>
           <div
             onClick={() => select('')}
@@ -191,13 +191,11 @@ const BudgetCalculator: React.FC<Props> = ({
   };
 
   const saveBaseline = () => {
-    if (savedAttempt) {
-      return;
-    }
+    if (attempts.length >= 5) return;
 
     const newAttempt: BudgetAttempt = {
       id: createAttemptId(),
-      name: 'Saved baseline',
+      name: `Scenario ${attempts.length + 1}`,
       createdAt: Date.now(),
       flightAssignments: { ...flightAssignments },
       selectedAccommodationId,
@@ -206,27 +204,24 @@ const BudgetCalculator: React.FC<Props> = ({
       perPersonTotal: snapshot.perPersonTotal
     };
 
-    onAttemptsChange([newAttempt]);
+    onAttemptsChange([...attempts, newAttempt]);
     onFixedAttemptIdChange(newAttempt.id);
   };
 
-  const applySavedBaseline = () => {
-    if (!savedAttempt) {
-      return;
-    }
+  const applySavedBaseline = (attempt?: BudgetAttempt | null) => {
+    const target = attempt ?? savedAttempt;
+    if (!target) return;
 
-    onFlightAssignmentsChange({ ...savedAttempt.flightAssignments });
-    onSelectedAccommodationChange(savedAttempt.selectedAccommodationId);
+    onFlightAssignmentsChange({ ...target.flightAssignments });
+    onSelectedAccommodationChange(target.selectedAccommodationId);
+    onFixedAttemptIdChange(target.id);
   };
 
   const replaceSavedWithCurrent = () => {
-    if (!savedAttempt) {
-      return;
-    }
+    if (!savedAttempt) return;
 
     const updatedAttempt: BudgetAttempt = {
       ...savedAttempt,
-      name: 'Saved baseline',
       createdAt: Date.now(),
       flightAssignments: { ...flightAssignments },
       selectedAccommodationId,
@@ -235,34 +230,37 @@ const BudgetCalculator: React.FC<Props> = ({
       perPersonTotal: snapshot.perPersonTotal
     };
 
-    onAttemptsChange([updatedAttempt]);
-    onFixedAttemptIdChange(updatedAttempt.id);
+    onAttemptsChange(attempts.map((a) => a.id === savedAttempt.id ? updatedAttempt : a));
   };
 
-  const clearSavedBaseline = () => {
-    onAttemptsChange([]);
-    onFixedAttemptIdChange('');
+  const deleteBaseline = (attemptId: string) => {
+    const next = attempts.filter((a) => a.id !== attemptId);
+    onAttemptsChange(next);
+    if (fixedAttemptId === attemptId) {
+      onFixedAttemptIdChange(next[0]?.id || '');
+    }
   };
 
-  const baselineTotalDelta = savedAttempt ? snapshot.totalCost - savedAttempt.totalCost : 0;
-  const baselineDeltaLabel = (() => {
-    if (!savedAttempt) {
-      return null;
+  const distributeEvenly = () => {
+    if (flights.length === 0) return;
+    const perFlight = Math.floor(settings.peopleCount / flights.length);
+    let remainder = settings.peopleCount - perFlight * flights.length;
+    const next: Record<string, number> = {};
+    for (const flight of flights) {
+      next[flight.id] = perFlight + (remainder > 0 ? 1 : 0);
+      if (remainder > 0) remainder--;
     }
-
-    if (baselineTotalDelta === 0) {
-      return hasUnsavedChanges
-        ? 'Current draft has a different option mix at the same total.'
-        : 'Current draft matches your saved baseline.';
-    }
-
-    return `${formatCurrency(Math.abs(baselineTotalDelta))} ${baselineTotalDelta > 0 ? 'above' : 'below'} saved baseline`;
-  })();
-
-  const savedAtLabel = savedAttempt ? new Date(savedAttempt.createdAt).toLocaleString() : null;
+    onFlightAssignmentsChange(next);
+  };
 
   return (
     <div className="budget-layout">
+      {isOverAssigned && (
+        <Alert variant="danger" className="mb-0">
+          Assigned travelers exceed team size. Reduce allocations to {settings.peopleCount}.
+        </Alert>
+      )}
+
       <Card className="workspace-card budget-hero-card">
         <Card.Body>
           <div className="d-flex align-items-center justify-content-between gap-3 flex-wrap mb-4">
@@ -310,58 +308,63 @@ const BudgetCalculator: React.FC<Props> = ({
         <Card.Header className="workspace-card-header">
           <div className="d-flex align-items-center justify-content-between gap-2 flex-wrap">
             <div>
-              <h3 className="workspace-card-title m-0">Saved Baseline</h3>
-              <p className="subtle-text mb-0">One saved plan only. Test changes in your current draft and override only when ready.</p>
+              <h3 className="workspace-card-title m-0">Saved Scenarios</h3>
+              <p className="subtle-text mb-0">Save up to 5 budget scenarios to compare options.</p>
             </div>
             <Button
               variant="primary"
               size="sm"
               onClick={saveBaseline}
               className="d-inline-flex align-items-center gap-2"
-              disabled={Boolean(savedAttempt)}
+              disabled={attempts.length >= 5}
             >
               <FaFlask />
-              {savedAttempt ? 'Baseline Saved' : 'Save Baseline'}
+              Save Current
             </Button>
           </div>
         </Card.Header>
         <Card.Body>
-          {!savedAttempt ? (
-            <div className="empty-inline-state">No saved baseline yet. Save your current setup when it looks good.</div>
+          {attempts.length === 0 ? (
+            <div className="empty-inline-state">No saved scenarios yet. Save your current setup when it looks good.</div>
           ) : (
-            <section className="fixed-attempt-panel">
-              <div>
-                <div className="small text-uppercase subtle-text fw-semibold">Saved Baseline</div>
-                <div className="fw-semibold">{savedAttempt.name}</div>
-                <div className="small subtle-text">
-                  {formatCurrency(savedAttempt.totalCost)} total • {formatCurrency(savedAttempt.remaining)} remaining • {formatCurrency(savedAttempt.perPersonTotal)} per person
-                </div>
-                <div className="small subtle-text">Saved {savedAtLabel}</div>
-                {baselineDeltaLabel && (
-                  <div className={`small ${hasUnsavedChanges ? 'text-warning-emphasis fw-semibold' : 'subtle-text'}`}>
-                    {baselineDeltaLabel}
-                  </div>
-                )}
-              </div>
-              <div className="d-flex align-items-center gap-2 flex-wrap">
-                <Button size="sm" variant="outline-secondary" onClick={applySavedBaseline}>
-                  Apply Saved
-                </Button>
-                <Button
-                  size="sm"
-                  variant="outline-secondary"
-                  onClick={replaceSavedWithCurrent}
-                  className="d-inline-flex align-items-center gap-2"
-                  disabled={!hasUnsavedChanges}
-                >
-                  <FaSync />
-                  Override With Current
-                </Button>
-                <Button size="sm" variant="link" className="text-danger text-decoration-none p-0" onClick={clearSavedBaseline}>
-                  Clear Saved
-                </Button>
-              </div>
-            </section>
+            <div className="d-flex flex-column gap-3">
+              {attempts.map((attempt) => {
+                const isActive = attempt.id === fixedAttemptId;
+                const delta = snapshot.totalCost - attempt.totalCost;
+                return (
+                  <section key={attempt.id} className={`fixed-attempt-panel ${isActive ? '' : 'opacity-75'}`}>
+                    <div>
+                      <div className="d-flex align-items-center gap-2">
+                        <div className="fw-semibold">{attempt.name}</div>
+                        {isActive && <span className="badge bg-primary-subtle text-primary-emphasis">Active</span>}
+                      </div>
+                      <div className="small subtle-text">
+                        {formatCurrency(attempt.totalCost)} total &bull; {formatCurrency(attempt.remaining)} remaining &bull; {formatCurrency(attempt.perPersonTotal)} pp
+                      </div>
+                      <div className="small subtle-text">Saved {new Date(attempt.createdAt).toLocaleString()}</div>
+                      {delta !== 0 && (
+                        <div className="small text-warning-emphasis fw-semibold">
+                          Current is {formatCurrency(Math.abs(delta))} {delta > 0 ? 'above' : 'below'}
+                        </div>
+                      )}
+                    </div>
+                    <div className="d-flex align-items-center gap-2 flex-wrap">
+                      <Button size="sm" variant={isActive ? 'outline-primary' : 'outline-secondary'} onClick={() => applySavedBaseline(attempt)}>
+                        Apply
+                      </Button>
+                      {isActive && (
+                        <Button size="sm" variant="outline-secondary" onClick={replaceSavedWithCurrent} disabled={!hasUnsavedChanges} className="d-inline-flex align-items-center gap-1">
+                          <FaSync size={10} /> Override
+                        </Button>
+                      )}
+                      <Button size="sm" variant="link" className="text-danger text-decoration-none p-0" onClick={() => deleteBaseline(attempt.id)}>
+                        <FaTrash size={12} />
+                      </Button>
+                    </div>
+                  </section>
+                );
+              })}
+            </div>
           )}
         </Card.Body>
       </Card>
@@ -374,8 +377,13 @@ const BudgetCalculator: React.FC<Props> = ({
             </Card.Header>
             <Card.Body>
               <Form.Group className="mb-4">
-                <Form.Label className="d-flex align-items-center gap-2 mb-2">
-                  <FaPlane /> Flight allocations
+                <Form.Label className="d-flex align-items-center justify-content-between gap-2 mb-2">
+                  <span className="d-flex align-items-center gap-2"><FaPlane /> Flight allocations</span>
+                  {flights.length > 0 && (
+                    <Button size="sm" variant="outline-secondary" onClick={distributeEvenly}>
+                      Distribute evenly
+                    </Button>
+                  )}
                 </Form.Label>
                 <div className="input-surface">
                   <div className={`small mb-3 ${isOverAssigned ? 'text-danger fw-semibold' : 'subtle-text'}`}>
@@ -478,11 +486,6 @@ const BudgetCalculator: React.FC<Props> = ({
         </Col>
       </Row>
 
-      {isOverAssigned && (
-        <Alert variant="danger" className="mb-0">
-          Assigned travelers exceed team size. Reduce allocations to {settings.peopleCount}.
-        </Alert>
-      )}
     </div>
   );
 };

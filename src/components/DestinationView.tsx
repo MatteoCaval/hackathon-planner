@@ -44,14 +44,16 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate, vot
 
   useEffect(() => {
     const handleHashChange = () => {
-      setActiveSection(getCurrentHashSection());
+      const section = getCurrentHashSection();
+      setActiveSection(section);
+      onSectionChange?.(section);
     };
 
     window.addEventListener('hashchange', handleHashChange);
     return () => {
       window.removeEventListener('hashchange', handleHashChange);
     };
-  }, []);
+  }, [onSectionChange]);
 
   const updateSection = (nextSection: WorkspaceSection) => {
     setActiveSection(nextSection);
@@ -211,13 +213,13 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate, vot
   };
 
   const handleAttemptsChange = (attempts: BudgetAttempt[]) => {
-    const nextAttempts = attempts.slice(0, 1);
+    const nextAttempts = attempts.slice(0, 5);
     commitUpdate((currentDestination) => ({
       ...currentDestination,
       budgetEstimator: {
         ...currentDestination.budgetEstimator,
         attempts: nextAttempts,
-        fixedAttemptId: nextAttempts[0]?.id || ''
+        fixedAttemptId: nextAttempts.length > 0 ? (currentDestination.budgetEstimator.fixedAttemptId || nextAttempts[0]?.id || '') : ''
       }
     }));
   };

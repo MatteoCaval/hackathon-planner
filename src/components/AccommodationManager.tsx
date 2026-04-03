@@ -183,7 +183,7 @@ const AccommodationManager: React.FC<Props> = ({
   const quickAddPriceRef = React.useRef<HTMLInputElement>(null);
 
   const currentYear = new Date().getFullYear();
-  const minDate = `${currentYear}-04-01`;
+  const minDate = `${currentYear}-01-01`;
   const parsedBulkAccommodations = useMemo(() => parseBulkAccommodations(bulkInput), [bulkInput]);
   const validBulkAccommodations = parsedBulkAccommodations.filter((row) => !row.error);
 
@@ -215,7 +215,7 @@ const AccommodationManager: React.FC<Props> = ({
 
   const isDraftLinkValid = Boolean(draft.link);
   const isDraftPriceValid = typeof draft.totalPrice === 'number' && draft.totalPrice > 0;
-  const isDraftImageValid = !draft.imageUrl || draftImageStatus === 'valid' || draftImageStatus === 'loading';
+  const isDraftImageValid = !draft.imageUrl || draftImageStatus === 'valid';
 
   const setDraftValue = (updates: Partial<Accommodation>) => {
     onDraftChange({ ...draft, ...updates });
@@ -236,8 +236,8 @@ const AccommodationManager: React.FC<Props> = ({
       endDate: draft.endDate || '',
       ...(draft.imageUrl ? { imageUrl: draft.imageUrl } : {}),
       createdAt: Date.now(),
-      ...(draft.rooms && draft.rooms > 0 ? { rooms: draft.rooms } : {}),
-      beds: (draft.beds != null && draft.beds > 0) ? draft.beds : peopleCount
+      ...(draft.rooms && draft.rooms > 0 ? { rooms: Math.min(draft.rooms, 50) } : {}),
+      beds: Math.min((draft.beds != null && draft.beds > 0) ? draft.beds : peopleCount, 50)
     };
 
     onChange([...accommodations, acc]);
@@ -455,7 +455,7 @@ const AccommodationManager: React.FC<Props> = ({
               {editImageStatus === 'loading' && <div className="small text-muted mt-1">Checking image…</div>}
               {editImageStatus === 'error' && <div className="small text-danger mt-1">Image could not be loaded. Check the URL.</div>}
               {editImageStatus === 'valid' && (
-                <img src={editForm.imageUrl} alt="preview" style={{ marginTop: 6, width: 80, height: 56, objectFit: 'cover', borderRadius: 4 }} />
+                <img src={editForm.imageUrl} alt="preview" style={{ marginTop: 6, width: 80, height: 56, objectFit: 'cover', borderRadius: 'var(--radius-xs)' }} />
               )}
             </div>
             <div className="d-flex gap-2">
@@ -470,7 +470,7 @@ const AccommodationManager: React.FC<Props> = ({
                 <img
                   src={accommodation.imageUrl}
                   alt={accommodation.description || 'Accommodation'}
-                  style={{ width: 72, height: '100%', objectFit: 'cover', borderRadius: 6, display: 'block', border: '1px solid var(--bs-border-color)' }}
+                  style={{ width: 72, height: '100%', objectFit: 'cover', borderRadius: 'var(--radius-xs)', display: 'block', border: '1px solid var(--bs-border-color)' }}
                 />
               </a>
             )}
@@ -716,7 +716,7 @@ const AccommodationManager: React.FC<Props> = ({
               {draftImageStatus === 'loading' && <div className="small text-muted mt-1">Checking image…</div>}
               {draftImageStatus === 'error' && <div className="small text-danger mt-1">Image could not be loaded. Check the URL.</div>}
               {draftImageStatus === 'valid' && (
-                <img src={draft.imageUrl} alt="preview" style={{ marginTop: 6, width: 80, height: 56, objectFit: 'cover', borderRadius: 4 }} />
+                <img src={draft.imageUrl} alt="preview" style={{ marginTop: 6, width: 80, height: 56, objectFit: 'cover', borderRadius: 'var(--radius-xs)' }} />
               )}
             </Form.Group>
 
@@ -956,7 +956,11 @@ const AccommodationManager: React.FC<Props> = ({
               {displayedAccommodations.length === 0 && (
                 <tr>
                   <td colSpan={3} className="text-center py-5">
-                    <div className="empty-inline-state">No matching stays. Adjust filters or add a new option.</div>
+                    <div className="empty-inline-state">
+                      {accommodations.length === 0
+                        ? 'No stays yet. Use the quick-add form above to add your first accommodation, or paste a booking URL to autofill.'
+                        : 'No matching stays. Adjust filters or add a new option.'}
+                    </div>
                   </td>
                 </tr>
               )}

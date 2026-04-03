@@ -143,7 +143,7 @@ const DateRangePicker: React.FC<Props> = ({ startDate, endDate, onChange, minDat
             color,
             fontWeight,
             borderRadius,
-            fontSize: 13,
+            fontSize: 'var(--font-size-sm)',
             outline: isToday && !isStart && !isEnd ? '1px solid var(--bs-primary)' : undefined,
             outlineOffset: '-2px',
           }}
@@ -180,9 +180,9 @@ const DateRangePicker: React.FC<Props> = ({ startDate, endDate, onChange, minDat
 
       {open && (
         <div style={{
-          position: 'absolute', zIndex: 1050, top: 'calc(100% + 4px)', left: 0,
+          position: 'absolute', zIndex: 'var(--z-popover)' as unknown as number, top: 'calc(100% + 4px)', left: 0,
           background: 'var(--bs-body-bg)', border: '1px solid var(--bs-border-color)',
-          borderRadius: 10, boxShadow: '0 6px 20px rgba(0,0,0,0.18)', padding: 16, minWidth: 280,
+          borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', padding: 16, minWidth: 280, maxWidth: 'calc(100vw - 32px)',
         }}>
           {/* Header */}
           <div className="d-flex align-items-center justify-content-between mb-2">

@@ -64,6 +64,10 @@
   --transition-normal: 220ms ease;
 
   --sidebar-width: 308px;
+
+  --z-dropdown: 1000;
+  --z-popover: 1050;
+  --z-popover-backdrop: 1049;
 }
 
 * {
@@ -1048,15 +1052,15 @@ a:hover {
 .clock-backdrop {
   position: fixed;
   inset: 0;
-  z-index: 1050;
+  z-index: var(--z-popover-backdrop);
 }
 
 .clock-popover {
-  z-index: 1051;
+  z-index: var(--z-popover);
   background: var(--bg-surface);
   border: 1px solid var(--color-neutral-300);
-  border-radius: 12px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
   padding: 12px;
   display: flex;
   flex-direction: column;
@@ -1122,6 +1126,347 @@ a:hover {
   gap: 8px;
   justify-content: flex-end;
   width: 100%;
+}
+
+/* ─── Dark Mode (opt-in via [data-theme="dark"] on <html>) ─── */
+@media not all {
+/* Disabled: dark mode is available but not auto-applied via prefers-color-scheme.
+   To enable, replace `@media not all` with `@media (prefers-color-scheme: dark)`,
+   or apply `data-theme="dark"` on the html element and change the selector below. */
+  :root {
+    /* Neutral scale (inverted for dark backgrounds) */
+    --color-neutral-950: #f0f4f8;
+    --color-neutral-900: #e2e8f0;
+    --color-neutral-800: #cbd5e1;
+    --color-neutral-700: #94a3b8;
+    --color-neutral-600: #94a3b8;
+    --color-neutral-500: #64748b;
+    --color-neutral-400: #475569;
+    --color-neutral-300: #334155;
+    --color-neutral-200: #1e293b;
+    --color-neutral-100: #1a2332;
+    --color-neutral-50: #0f172a;
+
+    /* Surface & background */
+    --bg-app: #0f172a;
+    --bg-surface: #1a2332;
+    --bg-muted: #1e293b;
+
+    /* Shadows (much more subtle on dark) */
+    --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+    --shadow-md: 0 12px 28px rgba(0, 0, 0, 0.35);
+    --shadow-lg: 0 26px 48px rgba(0, 0, 0, 0.4);
+
+    /* Semantic colors – slightly brighter for dark bg */
+    --color-success: #34d399;
+    --color-warning: #fbbf24;
+    --color-danger: #f87171;
+
+    /* Brand – bump lighter shades for readability */
+    --color-brand-500: #5ba8bf;
+    --color-brand-600: #4a96ad;
+    --color-brand-700: #5ba8bf;
+    --color-brand-800: #7ec4d6;
+  }
+
+  /* Bootstrap overrides */
+  body {
+    --bs-body-bg: #0f172a;
+    --bs-body-color: #e2e8f0;
+    --bs-border-color: #1e293b;
+    background:
+      radial-gradient(circle at 14% 0%, rgba(52, 127, 148, 0.08), transparent 36%),
+      radial-gradient(circle at 90% 8%, rgba(217, 180, 106, 0.06), transparent 32%),
+      linear-gradient(180deg, #0c1220 0%, var(--bg-app) 48%, #0e1525 100%);
+    color: var(--color-neutral-900);
+  }
+
+  a { color: var(--color-brand-500); }
+  a:hover { color: var(--color-brand-800); }
+
+  ::selection { background: rgba(217, 180, 106, 0.25); }
+
+  ::-webkit-scrollbar-thumb {
+    background: #334155;
+    border-color: transparent;
+  }
+  ::-webkit-scrollbar-thumb:hover { background: #475569; }
+
+  /* Topbar / navbar */
+  .app-topbar {
+    background: rgba(15, 23, 42, 0.92) !important;
+    border-bottom-color: var(--color-neutral-200);
+  }
+
+  /* Sidebar */
+  .sidebar-container {
+    background: var(--bg-surface);
+    border-right-color: var(--color-neutral-200);
+    box-shadow: 8px 0 28px rgba(0, 0, 0, 0.25);
+  }
+
+  .sidebar-footer {
+    border-top-color: var(--color-neutral-200);
+    background: linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-muted) 100%);
+  }
+
+  .sidebar-search {
+    border-color: var(--color-neutral-300);
+    background: var(--bg-muted);
+  }
+
+  .nav-link-custom:hover {
+    border-color: var(--color-neutral-300);
+    background: var(--color-neutral-100);
+  }
+
+  .nav-link-custom.active {
+    border-color: rgba(91, 168, 191, 0.35);
+    background: linear-gradient(135deg, rgba(91, 168, 191, 0.15), rgba(91, 168, 191, 0.05));
+    color: var(--color-brand-800);
+  }
+
+  /* Workspace cards */
+  .workspace-card {
+    background: var(--bg-surface);
+    border-color: var(--color-neutral-200);
+  }
+
+  .workspace-card:hover {
+    border-color: var(--color-neutral-300);
+  }
+
+  .workspace-card-header {
+    border-bottom-color: var(--color-neutral-200);
+    background: linear-gradient(180deg, #1e293b 0%, #1a2332 100%);
+  }
+
+  /* Budget status banner */
+  .budget-status-banner {
+    background: linear-gradient(120deg, rgba(10, 29, 37, 0.98) 0%, rgba(22, 57, 71, 0.96) 55%, rgba(31, 79, 96, 0.94) 100%);
+    border-color: rgba(91, 168, 191, 0.2);
+  }
+
+  .budget-status-empty {
+    background: linear-gradient(120deg, rgba(10, 29, 37, 0.95), rgba(22, 57, 71, 0.92));
+  }
+
+  /* Stat chips */
+  .stat-chip {
+    background: var(--bg-surface);
+    border-color: var(--color-neutral-300);
+  }
+
+  .stat-chip.negative {
+    border-color: rgba(248, 113, 113, 0.3);
+    background: rgba(153, 27, 27, 0.2);
+  }
+
+  /* Comparison items */
+  .comparison-item {
+    border-color: var(--color-neutral-200);
+    background: var(--bg-muted);
+  }
+
+  /* Attempt items */
+  .attempt-item {
+    border-color: var(--color-neutral-200);
+    background: var(--bg-muted);
+  }
+
+  .attempt-item.fixed {
+    border-color: rgba(91, 168, 191, 0.35);
+    background: linear-gradient(135deg, rgba(91, 168, 191, 0.12), rgba(91, 168, 191, 0.04));
+  }
+
+  .fixed-attempt-panel {
+    border-color: rgba(91, 168, 191, 0.3);
+    background: rgba(91, 168, 191, 0.1);
+  }
+
+  /* Input / form overrides */
+  .input-surface {
+    border-color: var(--color-neutral-200);
+    background: var(--bg-muted);
+  }
+
+  .form-control,
+  .form-select {
+    color: var(--color-neutral-900);
+    background: var(--bg-muted);
+    border-color: var(--color-neutral-300);
+  }
+
+  .form-control::placeholder {
+    color: var(--color-neutral-500);
+  }
+
+  .form-control:focus,
+  .form-select:focus {
+    border-color: rgba(91, 168, 191, 0.58);
+    box-shadow: 0 0 0 4px rgba(91, 168, 191, 0.18);
+    background: var(--bg-muted);
+  }
+
+  .input-group-text {
+    background: var(--color-neutral-100);
+    border-color: var(--color-neutral-300);
+    color: var(--color-neutral-700);
+  }
+
+  .form-label {
+    color: var(--color-neutral-700);
+  }
+
+  /* Buttons */
+  .btn-outline-secondary {
+    color: var(--color-neutral-700);
+    border-color: var(--color-neutral-300);
+    background: var(--bg-surface);
+  }
+
+  .btn-outline-secondary:hover,
+  .btn-outline-secondary:focus {
+    color: var(--color-neutral-900);
+    background: var(--bg-muted);
+    border-color: var(--color-neutral-400);
+  }
+
+  .btn-outline-primary {
+    color: var(--color-brand-500);
+    border-color: rgba(91, 168, 191, 0.35);
+    background: var(--bg-surface);
+  }
+
+  .btn-outline-primary:hover,
+  .btn-outline-primary:focus {
+    color: var(--color-brand-800);
+    background: rgba(91, 168, 191, 0.1);
+    border-color: rgba(91, 168, 191, 0.5);
+  }
+
+  /* Tables */
+  .table {
+    --bs-table-bg: transparent;
+    --bs-table-color: var(--color-neutral-900);
+    --bs-table-border-color: var(--color-neutral-200);
+    --bs-table-hover-bg: rgba(91, 168, 191, 0.06);
+    --bs-table-striped-bg: rgba(255, 255, 255, 0.02);
+    color: var(--color-neutral-900);
+  }
+
+  .table thead th {
+    background: var(--bg-muted);
+    color: var(--color-neutral-600);
+    border-bottom-color: var(--color-neutral-200);
+  }
+
+  .table tbody tr:hover {
+    background: rgba(91, 168, 191, 0.06);
+  }
+
+  .table td, .table th {
+    border-color: var(--color-neutral-200);
+  }
+
+  /* Manager controls */
+  .manager-controls {
+    border-bottom-color: var(--color-neutral-200);
+    background: var(--bg-muted);
+  }
+
+  /* Modals */
+  .modal-content {
+    background: var(--bg-surface);
+    border-color: var(--color-neutral-200);
+    color: var(--color-neutral-900);
+  }
+
+  .modal-header {
+    border-bottom-color: var(--color-neutral-200);
+  }
+
+  .modal-footer {
+    border-top-color: var(--color-neutral-200);
+  }
+
+  /* Cards (Bootstrap) */
+  .card {
+    --bs-card-bg: var(--bg-surface);
+    --bs-card-border-color: var(--color-neutral-200);
+    --bs-card-color: var(--color-neutral-900);
+    background: var(--bg-surface);
+    border-color: var(--color-neutral-200);
+    color: var(--color-neutral-900);
+  }
+
+  /* Dropdown menus */
+  .dropdown-menu {
+    --bs-dropdown-bg: var(--bg-surface);
+    --bs-dropdown-color: var(--color-neutral-900);
+    --bs-dropdown-border-color: var(--color-neutral-300);
+    --bs-dropdown-link-color: var(--color-neutral-900);
+    --bs-dropdown-link-hover-bg: var(--bg-muted);
+    --bs-dropdown-link-hover-color: var(--color-neutral-900);
+    background: var(--bg-surface);
+    border-color: var(--color-neutral-300);
+  }
+
+  /* Live share panel */
+  .live-share-panel {
+    border-color: var(--color-neutral-200);
+    background: var(--bg-surface);
+  }
+
+  /* Clock time picker */
+  .clock-trigger {
+    background: var(--bg-surface);
+  }
+
+  .clock-popover {
+    background: var(--bg-surface);
+    border-color: var(--color-neutral-300);
+  }
+
+  .clock-header-segment {
+    background: var(--color-neutral-100);
+    color: var(--color-neutral-700);
+  }
+
+  .clock-number {
+    fill: var(--color-neutral-800);
+  }
+
+  .clock-number.inner {
+    fill: var(--color-neutral-600);
+  }
+
+  /* Vote buttons */
+  .vote-btn {
+    border-color: var(--color-neutral-400);
+    color: var(--color-neutral-600);
+  }
+
+  /* Empty state */
+  .empty-state-icon {
+    background: radial-gradient(circle at 30% 30%, #1e3a4a 0%, #162d3a 100%);
+    color: var(--color-brand-500);
+  }
+
+  /* Settings cluster */
+  .settings-cluster {
+    border-left-color: var(--color-neutral-200);
+  }
+
+  /* Workspace nav */
+  .workspace-nav {
+    border-bottom-color: var(--color-neutral-200);
+  }
+
+  /* Focus outline */
+  :focus-visible {
+    outline-color: rgba(91, 168, 191, 0.4);
+  }
 }
 
 @media (prefers-reduced-motion: reduce) {

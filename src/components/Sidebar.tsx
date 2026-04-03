@@ -4,6 +4,8 @@ import { Destination } from '../types';
 import { FaMapMarkerAlt, FaPlus, FaTrash, FaSearch, FaExclamationTriangle } from 'react-icons/fa';
 import VoteButton from './VoteButton';
 
+type SidebarSort = 'added' | 'name-asc' | 'name-desc' | 'votes';
+
 interface Props {
   destinations: Destination[];
   activeId: string | null;
@@ -18,15 +20,24 @@ interface Props {
 const Sidebar: React.FC<Props> = ({ destinations, activeId, onSelect, onAddClick, onRemove, votes, currentPerson, onToggleVote }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [pendingRemove, setPendingRemove] = useState<{ id: string; name: string } | null>(null);
+  const [sortBy, setSortBy] = useState<SidebarSort>('added');
 
   const filteredDestinations = useMemo(() => {
     const query = searchQuery.trim().toLowerCase();
-    if (!query) {
-      return destinations;
+    const filtered = query
+      ? destinations.filter((destination) => destination.name.toLowerCase().includes(query))
+      : [...destinations];
+
+    if (sortBy === 'name-asc') {
+      filtered.sort((a, b) => a.name.localeCompare(b.name));
+    } else if (sortBy === 'name-desc') {
+      filtered.sort((a, b) => b.name.localeCompare(a.name));
+    } else if (sortBy === 'votes') {
+      filtered.sort((a, b) => (votes[b.id]?.length ?? 0) - (votes[a.id]?.length ?? 0));
     }
 
-    return destinations.filter((destination) => destination.name.toLowerCase().includes(query));
-  }, [destinations, searchQuery]);
+    return filtered;
+  }, [destinations, searchQuery, sortBy, votes]);
 
   return (
     <aside className="sidebar-container h-100 d-flex flex-column" aria-label="Destinations sidebar">
@@ -50,6 +61,19 @@ const Sidebar: React.FC<Props> = ({ destinations, activeId, onSelect, onAddClick
             />
           </div>
         </Form.Group>
+
+        <Form.Select
+          size="sm"
+          value={sortBy}
+          onChange={(e) => setSortBy(e.target.value as SidebarSort)}
+          aria-label="Sort destinations"
+          className="mt-2"
+        >
+          <option value="added">Added order</option>
+          <option value="name-asc">Name A-Z</option>
+          <option value="name-desc">Name Z-A</option>
+          <option value="votes">Most votes</option>
+        </Form.Select>
       </div>
 
       <div className="flex-grow-1 overflow-auto sidebar-list">

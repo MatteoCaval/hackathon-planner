@@ -127,7 +127,7 @@ const FlightManager: React.FC<Props> = ({
   const quickAddPriceRef = React.useRef<HTMLInputElement>(null);
 
   const currentYear = new Date().getFullYear();
-  const minDate = `${currentYear}-04-01`;
+  const minDate = `${currentYear}-01-01`;
   const parsedBulkFlights = useMemo(() => parseBulkFlights(bulkInput), [bulkInput]);
   const validBulkFlights = parsedBulkFlights.filter((row) => !row.error);
 
@@ -695,7 +695,11 @@ const FlightManager: React.FC<Props> = ({
               {displayedFlights.length === 0 && (
                 <tr>
                   <td colSpan={3} className="text-center py-5">
-                    <div className="empty-inline-state">No matching flights. Adjust filters or add a new option.</div>
+                    <div className="empty-inline-state">
+                      {flights.length === 0
+                        ? 'No flights yet. Use the quick-add form above to add your first flight option, or paste a booking URL to autofill.'
+                        : 'No matching flights. Adjust filters or add a new option.'}
+                    </div>
                   </td>
                 </tr>
               )}

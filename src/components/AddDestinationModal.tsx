@@ -26,6 +26,7 @@ const AddDestinationModal: React.FC<Props> = ({ show, onHide, onAdd }) => {
   const [isSearching, setIsSearching] = useState(false);
   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
   const [statusMessage, setStatusMessage] = useState<{ kind: 'error' | 'success' | 'warning'; message: string } | null>(null);
+  const abortControllerRef = React.useRef<AbortController | null>(null);
 
   const isNameValid = useMemo(() => newName.trim().length > 0, [newName]);
   const isLatValid = useMemo(() => isFiniteNumber(newLat), [newLat]);
@@ -63,9 +64,11 @@ const AddDestinationModal: React.FC<Props> = ({ show, onHide, onAdd }) => {
   };
 
   const handleClose = () => {
+    abortControllerRef.current?.abort();
     setNewName('');
     setNewLat('');
     setNewLng('');
+    setIsSearching(false);
     setAttemptedSubmit(false);
     setStatusMessage(null);
     onHide();
@@ -77,10 +80,17 @@ const AddDestinationModal: React.FC<Props> = ({ show, onHide, onAdd }) => {
       return;
     }
 
+    abortControllerRef.current?.abort();
+    const controller = new AbortController();
+    abortControllerRef.current = controller;
+
     setIsSearching(true);
     setStatusMessage(null);
     try {
-      const response = await fetch(`https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(newName)}`);
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(newName)}`,
+        { signal: controller.signal }
+      );
       const data = await response.json();
       if (data && data.length > 0) {
         setNewLat(data[0].lat);
@@ -90,10 +100,11 @@ const AddDestinationModal: React.FC<Props> = ({ show, onHide, onAdd }) => {
         setStatusMessage({ kind: 'warning', message: 'Location not found. Please edit manually.' });
       }
     } catch (error) {
+      if ((error as Error).name === 'AbortError') return;
       console.error('Geocoding failed', error);
       setStatusMessage({ kind: 'error', message: 'Search failed. Please try again.' });
     } finally {
-      setIsSearching(false);
+      if (!controller.signal.aborted) setIsSearching(false);
     }
   };
 

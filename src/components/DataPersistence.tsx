@@ -28,6 +28,7 @@ const DataPersistence: React.FC<Props> = ({ destinations, onImport }) => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
     setStatus({ kind: 'success', message: 'Export complete.' });
   };
 
@@ -46,14 +47,19 @@ const DataPersistence: React.FC<Props> = ({ destinations, onImport }) => {
         const parsedData = JSON.parse(json);
 
         if (Array.isArray(parsedData)) {
-            // Basic validation: check if items have an 'id' and 'name'
-            const isValid = parsedData.every((item: any) => item.id && item.name);
-            if (isValid) {
-                // Directly override without confirmation
+            const isValid = parsedData.every((item: unknown) => {
+              if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
+              const d = item as Record<string, unknown>;
+              return typeof d.id === 'string' && d.id.trim() !== ''
+                && typeof d.name === 'string' && d.name.trim() !== ''
+                && typeof d.latitude === 'number' && Number.isFinite(d.latitude)
+                && typeof d.longitude === 'number' && Number.isFinite(d.longitude);
+            });
+            if (isValid && parsedData.length > 0) {
                 onImport(parsedData);
                 setStatus({ kind: 'success', message: `Imported ${parsedData.length} destinations.` });
             } else {
-                setStatus({ kind: 'error', message: 'Invalid file format. Upload a valid planner JSON file.' });
+                setStatus({ kind: 'error', message: 'Invalid file format. Each destination must have id, name, and valid coordinates.' });
             }
         } else {
             setStatus({ kind: 'error', message: 'Invalid file format. Data must be an array.' });

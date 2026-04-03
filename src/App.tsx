@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useRef } from 'react';
-import { Button, Container, Form, InputGroup, Modal, Navbar, Spinner, Table } from 'react-bootstrap';
-import { get, onValue, ref, set } from 'firebase/database';
+import { Button, Container, Form, InputGroup, Modal, Navbar, Offcanvas, Spinner, Table } from 'react-bootstrap';
+import { get, onValue, ref, set, update } from 'firebase/database';
 import Sidebar from './components/Sidebar';
 import DestinationView from './components/DestinationView';
 import AddDestinationModal from './components/AddDestinationModal';
@@ -184,7 +184,7 @@ const hasInvalidBudgetAttempts = (attempts: unknown): boolean => {
     return true;
   }
 
-  if (attempts.length > 1) {
+  if (attempts.length > 5) {
     return true;
   }
 
@@ -215,9 +215,8 @@ const normalizeBudgetEstimator = (budgetEstimator: unknown): BudgetEstimatorStat
   const typedBudgetEstimator = budgetEstimator as LegacyBudgetEstimator | undefined;
   const attempts = normalizeBudgetAttempts(typedBudgetEstimator?.attempts);
   const fixedAttemptId = typeof typedBudgetEstimator?.fixedAttemptId === 'string' ? typedBudgetEstimator.fixedAttemptId : '';
-  const preferredAttempt = attempts.find((attempt) => attempt.id === fixedAttemptId) ?? attempts[0];
-  const normalizedAttempts = preferredAttempt ? [preferredAttempt] : [];
-  const normalizedFixedAttemptId = normalizedAttempts[0]?.id || '';
+  const normalizedAttempts = attempts.slice(0, 5);
+  const normalizedFixedAttemptId = normalizedAttempts.some((a) => a.id === fixedAttemptId) ? fixedAttemptId : (normalizedAttempts[0]?.id || '');
 
   return {
     flightAssignments: normalizeFlightAssignments(typedBudgetEstimator?.flightAssignments),
@@ -350,20 +349,21 @@ const normalizeStayLinks = (raw: unknown): { label: string; url: string }[] | un
   return result.length > 0 ? result : undefined;
 };
 
-const normalizeDestination = (destination: LegacyDestination): Destination => ({
-  ...destination,
-  notes: typeof destination.notes === 'string' ? destination.notes : '',
-  extraCosts: normalizeExtraCosts(destination.extraCosts),
-  budgetEstimator: normalizeBudgetEstimator(destination.budgetEstimator),
-  flightDraft: normalizeFlightDraft(destination.flightDraft),
-  accommodationDraft: normalizeAccommodationDraft(destination.accommodationDraft),
-  ...(normalizeCustomGroupLinks((destination as Record<string, unknown>).customGroupLinks)
-    ? { customGroupLinks: normalizeCustomGroupLinks((destination as Record<string, unknown>).customGroupLinks) }
-    : {}),
-  ...(normalizeStayLinks((destination as Record<string, unknown>).stayLinks)
-    ? { stayLinks: normalizeStayLinks((destination as Record<string, unknown>).stayLinks) }
-    : {})
-});
+const normalizeDestination = (destination: LegacyDestination): Destination => {
+  const raw = destination as Record<string, unknown>;
+  const customGroupLinks = normalizeCustomGroupLinks(raw.customGroupLinks);
+  const stayLinks = normalizeStayLinks(raw.stayLinks);
+  return {
+    ...destination,
+    notes: typeof destination.notes === 'string' ? destination.notes : '',
+    extraCosts: normalizeExtraCosts(destination.extraCosts),
+    budgetEstimator: normalizeBudgetEstimator(destination.budgetEstimator),
+    flightDraft: normalizeFlightDraft(destination.flightDraft),
+    accommodationDraft: normalizeAccommodationDraft(destination.accommodationDraft),
+    ...(customGroupLinks ? { customGroupLinks } : {}),
+    ...(stayLinks ? { stayLinks } : {})
+  };
+};
 
 const parseNumberValue = (value: unknown): number | null => {
   if (typeof value === 'number' && Number.isFinite(value)) {
@@ -497,10 +497,13 @@ const normalizeSearchLinks = (candidate: unknown, fallback: SearchLinkTemplate[]
     .map((item) => {
       const id = item.id as string;
       const builtIn = defaultById.get(id);
-      // For built-in links, always use the latest URL template
+      // For built-in links, preserve user's template if customized, otherwise use latest default
       if (builtIn) {
+        const userTemplate = item.urlTemplate as string;
+        const isCustomized = userTemplate && userTemplate !== builtIn.urlTemplate;
         return {
           ...builtIn,
+          ...(isCustomized ? { urlTemplate: userTemplate } : {}),
           enabled: typeof item.enabled === 'boolean' ? item.enabled : true
         };
       }
@@ -602,6 +605,7 @@ function App() {
   const [showAddModal, setShowAddModal] = useState(false);
   const [showSearchLinksModal, setShowSearchLinksModal] = useState(false);
   const [showVoteSummary, setShowVoteSummary] = useState(false);
+  const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [currentPerson, setCurrentPerson] = useLocalStorage<string>('hackathon-current-person', '');
   const [tripMembers, setTripMembers] = useLocalStorage<string[]>('hackathon-trip-members', []);
   const [votes, setVotes] = useLocalStorage<TripVotes>('hackathon-votes', DEFAULT_VOTES);
@@ -778,10 +782,14 @@ function App() {
   const syncToFirebase = (subPath: string, data: unknown) => {
     if (!isSyncing || !firebaseDatabase) return;
     setSyncStatus('syncing');
-    set(ref(firebaseDatabase, `trips/${normalizedSyncedCode}/${subPath}`), data)
+    // Atomic multi-path update: data + meta in a single write
+    const updates: Record<string, unknown> = {
+      [`trips/${normalizedSyncedCode}/${subPath}`]: data,
+      [`trips/${normalizedSyncedCode}/meta`]: { updatedAt: Date.now(), updatedBy: syncClientId }
+    };
+    update(ref(firebaseDatabase), updates)
       .then(() => setSyncStatus('synced'))
       .catch(() => setSyncStatus('error'));
-    void set(ref(firebaseDatabase, `trips/${normalizedSyncedCode}/meta`), { updatedAt: Date.now(), updatedBy: syncClientId });
   };
 
   const handleForceRefresh = () => {
@@ -809,9 +817,9 @@ function App() {
       newDests = prevDests.map((d) => d.id === destinationId ? updater(d) : d);
       return newDests;
     });
-    // queueMicrotask fires before any async Firebase onValue callback, so isRemoteUpdate is
-    // still false at this point and syncToFirebase will proceed.
-    queueMicrotask(() => syncToFirebase('destinations', newDests));
+    queueMicrotask(() => {
+      if (!isRemoteUpdate.current) syncToFirebase('destinations', newDests);
+    });
   };
 
   const handleAddDestination = (newDest: Destination) => {
@@ -929,7 +937,8 @@ function App() {
     }));
 
     if (isSyncing && firebaseDatabase) {
-      void set(ref(firebaseDatabase, `trips/${normalizedSyncedCode}/votes/${category}/${entityId}`), next);
+      set(ref(firebaseDatabase, `trips/${normalizedSyncedCode}/votes/${category}/${entityId}`), next)
+        .catch((err) => console.error('Vote sync failed:', err));
     }
   };
 
@@ -1012,123 +1021,94 @@ function App() {
                 </div>
               </Navbar.Brand>
 
-              <div className="settings-cluster d-flex align-items-center gap-2 flex-wrap">
-                <InputGroup size="sm" style={{ width: '180px' }}>
-                  <InputGroup.Text><FaWallet /></InputGroup.Text>
-                  <Form.Control
-                    type="number"
-                    step="10"
-                    min="0"
-                    placeholder="Total budget"
-                    aria-label="Total budget"
-                    value={settings.totalBudget}
-                    onChange={(e) => handleTotalBudgetChange(e.target.value)}
+              <div className="d-flex align-items-center gap-2">
+                {isSyncing && (
+                  <span className="badge border bg-success-subtle text-success-emphasis border-success-subtle">
+                    Live: {normalizedSyncedCode}
+                  </span>
+                )}
+                {isSyncing && (
+                  <span
+                    title={syncStatus === 'synced' ? 'All changes synced' : syncStatus === 'syncing' ? 'Syncing...' : syncStatus === 'error' ? 'Sync error' : ''}
+                    style={{
+                      display: 'inline-block', width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
+                      backgroundColor: syncStatus === 'synced' ? 'var(--bs-success)' : syncStatus === 'syncing' ? 'var(--bs-warning)' : syncStatus === 'error' ? 'var(--bs-danger)' : 'var(--bs-secondary)',
+                      boxShadow: syncStatus === 'syncing' ? '0 0 0 2px var(--bs-warning-bg-subtle)' : syncStatus === 'synced' ? '0 0 0 2px var(--bs-success-bg-subtle)' : 'none',
+                    }}
+                    aria-label={`Sync status: ${syncStatus}`}
                   />
-                </InputGroup>
-
-                <InputGroup size="sm" style={{ width: '140px' }}>
-                  <InputGroup.Text><FaUsers /></InputGroup.Text>
-                  <Form.Control
-                    type="number"
-                    min="1"
-                    placeholder="People"
-                    aria-label="People count"
-                    value={settings.peopleCount}
-                    onChange={(e) => handlePeopleCountChange(e.target.value)}
-                  />
-                </InputGroup>
-
-                <PersonSelector
-                  currentPerson={currentPerson}
-                  onPersonChange={setCurrentPerson}
-                  tripMembers={tripMembers}
-                  onAddMember={handleAddTripMember}
-                />
-
-                <Button size="sm" variant="outline-secondary" onClick={() => setShowVoteSummary(true)} title="Vote results" aria-label="Vote results">
-                  <FaPoll />
-                </Button>
-
-                <Button size="sm" variant="outline-secondary" onClick={() => setShowSearchLinksModal(true)} title="Search link settings" aria-label="Search link settings">
+                )}
+                <Button size="sm" variant="outline-secondary" onClick={() => setShowSettingsDrawer(true)} title="Settings" aria-label="Open settings">
                   <FaCog />
                 </Button>
               </div>
             </div>
-
-            <div className="topbar-actions d-flex align-items-center justify-content-end gap-3 flex-wrap">
-              <section className="live-share-panel d-flex flex-column" aria-label="Trip sync controls">
-                <div className="d-flex align-items-center gap-2 mb-1">
-                  <strong className="small">Trip Sync</strong>
-                  <span
-                    className={`badge border ${isSyncing ? 'bg-success-subtle text-success-emphasis border-success-subtle' : isTripSyncAvailable ? 'bg-secondary-subtle text-secondary-emphasis border-secondary-subtle' : 'bg-warning-subtle text-warning-emphasis border-warning-subtle'}`}
-                  >
-                    {isSyncing ? `Live: ${normalizedSyncedCode}` : isTripSyncAvailable ? 'Not connected' : 'Unavailable'}
-                  </span>
-                  {isSyncing && (
-                    <span
-                      title={syncStatus === 'synced' ? 'All changes synced' : syncStatus === 'syncing' ? 'Syncing…' : syncStatus === 'error' ? 'Sync error' : ''}
-                      style={{
-                        display: 'inline-block',
-                        width: 10,
-                        height: 10,
-                        borderRadius: '50%',
-                        flexShrink: 0,
-                        backgroundColor: syncStatus === 'synced' ? 'var(--bs-success)' : syncStatus === 'syncing' ? 'var(--bs-warning)' : syncStatus === 'error' ? 'var(--bs-danger)' : 'var(--bs-secondary)',
-                        boxShadow: syncStatus === 'syncing' ? '0 0 0 2px var(--bs-warning-bg-subtle)' : syncStatus === 'synced' ? '0 0 0 2px var(--bs-success-bg-subtle)' : 'none',
-                      }}
-                      aria-label={`Sync status: ${syncStatus}`}
-                    />
-                  )}
-                </div>
-                <div className="trip-sync-controls">
-                  {isSyncing ? (
-                    <div className="d-flex gap-2 align-items-center">
-                      <Button size="sm" variant="outline-primary" onClick={handleShareTrip} title="Copy share link">
-                        <FaLink className="me-1" /> {shareTooltip || 'Share'}
-                      </Button>
-                      <Button size="sm" variant="outline-secondary" onClick={handleForceRefresh} title="Pull latest from Firebase" disabled={syncStatus === 'syncing'}>
-                        <FaSync className={syncStatus === 'syncing' ? 'spin' : ''} />
-                      </Button>
-                      <Button size="sm" variant="outline-secondary" onClick={handleLeaveTrip}>
-                        Leave
-                      </Button>
-                    </div>
-                  ) : (
-                    <>
-                      <Form.Control
-                        size="sm"
-                        value={tripCodeInput}
-                        onChange={(e) => setTripCodeInput(normalizeTripCode(e.target.value))}
-                        placeholder="Trip code"
-                        aria-label="Trip code to join"
-                        autoCapitalize="characters"
-                        autoCorrect="off"
-                        spellCheck={false}
-                        onKeyDown={(e) => { if (e.key === 'Enter') void handleJoinTrip(); }}
-                      />
-                      <Button
-                        size="sm"
-                        variant="outline-secondary"
-                        onClick={handleJoinTrip}
-                        disabled={!isTripSyncAvailable || normalizeTripCode(tripCodeInput).length < TRIP_CODE_MIN_LENGTH || isJoining}
-                      >
-                        {isJoining ? <Spinner animation="border" size="sm" /> : 'Join'}
-                      </Button>
-                    </>
-                  )}
-                </div>
-                {!isTripSyncAvailable && (
-                  <div className="inline-status warning mt-1" role="status" aria-live="polite">
-                    Firebase config missing — sync disabled.
-                  </div>
-                )}
-              </section>
-
-              <DataPersistence destinations={destinations} onImport={handleImport} />
-            </div>
           </div>
         </Container>
       </Navbar>
+
+      <Offcanvas show={showSettingsDrawer} onHide={() => setShowSettingsDrawer(false)} placement="end">
+        <Offcanvas.Header closeButton>
+          <Offcanvas.Title>Settings</Offcanvas.Title>
+        </Offcanvas.Header>
+        <Offcanvas.Body>
+          <h6 className="text-uppercase text-muted small fw-bold mb-2">Budget</h6>
+          <InputGroup size="sm" className="mb-3">
+            <InputGroup.Text><FaWallet /></InputGroup.Text>
+            <Form.Control type="number" step="10" min="0" placeholder="Total budget" aria-label="Total budget" value={settings.totalBudget} onChange={(e) => handleTotalBudgetChange(e.target.value)} />
+          </InputGroup>
+
+          <h6 className="text-uppercase text-muted small fw-bold mb-2">People</h6>
+          <InputGroup size="sm" className="mb-3">
+            <InputGroup.Text><FaUsers /></InputGroup.Text>
+            <Form.Control type="number" min="1" placeholder="People" aria-label="People count" value={settings.peopleCount} onChange={(e) => handlePeopleCountChange(e.target.value)} />
+          </InputGroup>
+
+          <h6 className="text-uppercase text-muted small fw-bold mb-2">Person</h6>
+          <div className="mb-3">
+            <PersonSelector currentPerson={currentPerson} onPersonChange={setCurrentPerson} tripMembers={tripMembers} onAddMember={handleAddTripMember} />
+          </div>
+
+          <h6 className="text-uppercase text-muted small fw-bold mb-2">Votes &amp; Links</h6>
+          <div className="d-flex gap-2 mb-4">
+            <Button size="sm" variant="outline-secondary" onClick={() => setShowVoteSummary(true)} title="Vote results"><FaPoll className="me-1" /> Votes</Button>
+            <Button size="sm" variant="outline-secondary" onClick={() => setShowSearchLinksModal(true)} title="Search link settings"><FaCog className="me-1" /> Search Links</Button>
+          </div>
+
+          <hr />
+
+          <h6 className="text-uppercase text-muted small fw-bold mb-2">Trip Sync</h6>
+          <section className="mb-4" aria-label="Trip sync controls">
+            <div className="d-flex align-items-center gap-2 mb-2">
+              <span className={`badge border ${isSyncing ? 'bg-success-subtle text-success-emphasis border-success-subtle' : isTripSyncAvailable ? 'bg-secondary-subtle text-secondary-emphasis border-secondary-subtle' : 'bg-warning-subtle text-warning-emphasis border-warning-subtle'}`}>
+                {isSyncing ? `Live: ${normalizedSyncedCode}` : isTripSyncAvailable ? 'Not connected' : 'Unavailable'}
+              </span>
+            </div>
+            {isSyncing ? (
+              <div className="d-flex gap-2 align-items-center flex-wrap">
+                <Button size="sm" variant="outline-primary" onClick={handleShareTrip} title="Copy share link"><FaLink className="me-1" /> {shareTooltip || 'Share'}</Button>
+                <Button size="sm" variant="outline-secondary" onClick={handleForceRefresh} title="Pull latest" disabled={syncStatus === 'syncing'}><FaSync className={syncStatus === 'syncing' ? 'spin' : ''} /></Button>
+                <Button size="sm" variant="outline-secondary" onClick={handleLeaveTrip}>Leave</Button>
+              </div>
+            ) : (
+              <div className="d-flex gap-2 align-items-center">
+                <Form.Control size="sm" value={tripCodeInput} onChange={(e) => setTripCodeInput(normalizeTripCode(e.target.value))} placeholder="Trip code" aria-label="Trip code to join" autoCapitalize="characters" autoCorrect="off" spellCheck={false} onKeyDown={(e) => { if (e.key === 'Enter') void handleJoinTrip(); }} />
+                <Button size="sm" variant="outline-secondary" onClick={handleJoinTrip} disabled={!isTripSyncAvailable || normalizeTripCode(tripCodeInput).length < TRIP_CODE_MIN_LENGTH || isJoining}>
+                  {isJoining ? <Spinner animation="border" size="sm" /> : 'Join'}
+                </Button>
+              </div>
+            )}
+            {!isTripSyncAvailable && (
+              <div className="inline-status warning mt-1" role="status" aria-live="polite">Firebase config missing — sync disabled.</div>
+            )}
+          </section>
+
+          <hr />
+
+          <h6 className="text-uppercase text-muted small fw-bold mb-2">Data</h6>
+          <DataPersistence destinations={destinations} onImport={handleImport} />
+        </Offcanvas.Body>
+      </Offcanvas>
 
       <div className="app-main d-flex flex-grow-1 overflow-hidden">
         <Sidebar
