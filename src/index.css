@@ -185,6 +185,87 @@ a:hover { text-decoration: underline; }
   padding: 8px 12px;
 }
 
+/* Mobile destination picker (replaces pill tabs on narrow screens) */
+.dest-picker {
+  display: none;
+  position: relative;
+}
+
+.dest-picker-trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px 8px 14px;
+  background: var(--surface-1);
+  border: 1px solid var(--line);
+  border-radius: var(--r-pill);
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--ink-1);
+  cursor: pointer;
+  font-family: inherit;
+  transition: background 0.12s;
+}
+
+.dest-picker-trigger:hover { background: var(--surface-0); }
+
+.dest-picker-trigger .dest-picker-name {
+  max-width: 140px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.dest-picker-trigger svg { color: var(--ink-3); }
+
+.dest-picker-menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  min-width: 220px;
+  background: var(--surface-0);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  box-shadow: var(--elev-3);
+  padding: 6px;
+  z-index: 80;
+  animation: menuIn 160ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+
+.dest-picker-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 10px;
+  width: 100%;
+  border: none;
+  background: transparent;
+  border-radius: var(--r-sm);
+  font-size: 14px;
+  color: var(--ink-1);
+  cursor: pointer;
+  font-family: inherit;
+  text-align: left;
+}
+
+.dest-picker-item:hover { background: var(--surface-1); }
+
+.dest-picker-item.is-active {
+  background: var(--accent-tint);
+  color: var(--accent-ink);
+  font-weight: 500;
+}
+
+.dest-picker-item .dest-flag { font-size: 16px; line-height: 1; }
+
+.dest-picker-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 4px 0;
+}
+
+.dest-picker-add { color: var(--ink-3); }
+
 .header-spacer { flex: 1; }
 
 .header-actions {
@@ -1798,6 +1879,11 @@ a:hover { text-decoration: underline; }
   .hero-photo { min-height: 200px; }
 }
 
+@media (max-width: 900px) {
+  .dest-switcher { display: none; }
+  .dest-picker { display: block; }
+}
+
 @media (max-width: 700px) {
   .header-row { padding: 10px 14px; flex-wrap: wrap; }
   .page { padding: 0 14px 60px; }
@@ -1805,7 +1891,6 @@ a:hover { text-decoration: underline; }
   .hero-title { font-size: 40px; }
   .hero-stats { grid-template-columns: repeat(2, 1fr); gap: 12px; }
   .group-body { grid-template-columns: 1fr; }
-  .dest-switcher { order: 3; flex-basis: 100%; overflow-x: auto; }
   .section-head { flex-wrap: wrap; }
   .section-actions { width: 100%; }
   .flight-bottom { flex-wrap: wrap; }

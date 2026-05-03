@@ -1008,17 +1008,20 @@ function App() {
   const [syncOpen, setSyncOpen] = useState(false);
   const [syncDraft, setSyncDraft] = useState('');
   const [copiedCode, setCopiedCode] = useState(false);
+  const [destMenuOpen, setDestMenuOpen] = useState(false);
   const personRef = useRef<HTMLDivElement>(null);
   const syncRef = useRef<HTMLDivElement>(null);
+  const destRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     const onClick = (e: MouseEvent) => {
       if (personMenuOpen && personRef.current && !personRef.current.contains(e.target as Node)) setPersonMenuOpen(false);
       if (syncOpen && syncRef.current && !syncRef.current.contains(e.target as Node)) setSyncOpen(false);
+      if (destMenuOpen && destRef.current && !destRef.current.contains(e.target as Node)) setDestMenuOpen(false);
     };
     document.addEventListener('mousedown', onClick);
     return () => document.removeEventListener('mousedown', onClick);
-  }, [personMenuOpen, syncOpen]);
+  }, [personMenuOpen, syncOpen, destMenuOpen]);
 
   const copyTripCode = () => {
     navigator.clipboard?.writeText(normalizedSyncedCode || '');
@@ -1060,6 +1063,40 @@ function App() {
             <button className="dest-tab add-tab" onClick={() => setShowAddModal(true)} title="Add destination">
               <FaPlus size={12} />
             </button>
+          </div>
+
+          {/* Mobile destination picker (visible < 900px) */}
+          <div className="dest-picker" ref={destRef}>
+            <button
+              className="dest-picker-trigger"
+              onClick={() => setDestMenuOpen(o => !o)}
+              aria-haspopup="listbox"
+              aria-expanded={destMenuOpen}
+            >
+              <span className="dest-picker-name">{activeDestination?.name || 'Select'}</span>
+              <FaChevronDown size={10} />
+            </button>
+            {destMenuOpen && (
+              <div className="dest-picker-menu" role="listbox">
+                {destinations.map((d) => (
+                  <button
+                    key={d.id}
+                    role="option"
+                    aria-selected={d.id === activeId}
+                    className={`dest-picker-item${d.id === activeId ? ' is-active' : ''}`}
+                    onClick={() => { setActiveId(d.id); setDestMenuOpen(false); }}
+                  >
+                    <span>{d.name}</span>
+                    {d.id === activeId && <FaCheck size={10} style={{ marginLeft: 'auto', color: 'var(--accent)' }} />}
+                  </button>
+                ))}
+                <div className="dest-picker-divider" />
+                <button className="dest-picker-item dest-picker-add" onClick={() => { setDestMenuOpen(false); setShowAddModal(true); }}>
+                  <FaPlus size={10} />
+                  <span>Add destination</span>
+                </button>
+              </div>
+            )}
           </div>
 
           <div className="header-spacer" />
