@@ -1,8 +1,9 @@
 import React from 'react';
-import { Accommodation, Destination, Flight, PlannerSettings, TripVotes } from '../types';
+import { Accommodation, BudgetAttempt, Destination, ExtraCost, Flight, PlannerSettings, TripVotes } from '../types';
 import { DEFAULT_SEARCH_LINKS } from '../utils/bookingLinks';
 import FlightManager from './FlightManager';
 import AccommodationManager from './AccommodationManager';
+import BudgetCalculator from './BudgetCalculator';
 import { calculateBudgetSnapshot } from '../utils/budget';
 
 interface Props {
@@ -77,6 +78,40 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate, vot
     commitUpdate((d) => ({ ...d, stayLinks: stayLinks.length > 0 ? stayLinks : undefined }));
   };
 
+  const handleExtraCostsChange = (extraCosts: ExtraCost[]) => {
+    commitUpdate((d) => ({ ...d, extraCosts }));
+  };
+
+  const handleFlightAssignmentsChange = (flightAssignments: Record<string, number>) => {
+    commitUpdate((d) => ({ ...d, budgetEstimator: { ...d.budgetEstimator, flightAssignments } }));
+  };
+
+  const handleSelectedAccommodationChange = (selectedAccommodationId: string) => {
+    commitUpdate((d) => ({ ...d, budgetEstimator: { ...d.budgetEstimator, selectedAccommodationId } }));
+  };
+
+  const handleAttemptsChange = (attempts: BudgetAttempt[]) => {
+    const next = attempts.slice(0, 5);
+    commitUpdate((d) => ({
+      ...d,
+      budgetEstimator: {
+        ...d.budgetEstimator,
+        attempts: next,
+        fixedAttemptId: next.length > 0 ? (d.budgetEstimator.fixedAttemptId || next[0]?.id || '') : ''
+      }
+    }));
+  };
+
+  const handleFixedAttemptIdChange = (fixedAttemptId: string) => {
+    commitUpdate((d) => ({
+      ...d,
+      budgetEstimator: {
+        ...d.budgetEstimator,
+        fixedAttemptId: fixedAttemptId && d.budgetEstimator.attempts.some((a) => a.id === fixedAttemptId) ? fixedAttemptId : ''
+      }
+    }));
+  };
+
   const flightVoteCount = destination.flights.reduce((sum, f) => sum + (votes.flights[f.id]?.length || 0), 0);
   const accVoteCount = destination.accommodations.reduce((sum, a) => sum + (votes.accommodations[a.id]?.length || 0), 0);
 
@@ -139,6 +174,23 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate, vot
         onCustomGroupLinksChange={handleCustomGroupLinksChange}
         stayLinks={destination.stayLinks || []}
         onStayLinksChange={handleStayLinksChange}
+      />
+
+      {/* Final plan / budget calculator */}
+      <BudgetCalculator
+        flights={destination.flights}
+        accommodations={destination.accommodations}
+        settings={settings}
+        extraCosts={destination.extraCosts}
+        onExtraCostsChange={handleExtraCostsChange}
+        flightAssignments={destination.budgetEstimator.flightAssignments}
+        onFlightAssignmentsChange={handleFlightAssignmentsChange}
+        selectedAccommodationId={destination.budgetEstimator.selectedAccommodationId}
+        onSelectedAccommodationChange={handleSelectedAccommodationChange}
+        attempts={destination.budgetEstimator.attempts}
+        fixedAttemptId={destination.budgetEstimator.fixedAttemptId}
+        onAttemptsChange={handleAttemptsChange}
+        onFixedAttemptIdChange={handleFixedAttemptIdChange}
       />
     </>
   );
