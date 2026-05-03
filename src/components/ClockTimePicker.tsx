@@ -141,9 +141,9 @@ const ClockTimePicker: React.FC<Props> = ({ value, onChange, label, size = 'sm' 
           <line
             x1={CLOCK_RADIUS} y1={CLOCK_RADIUS}
             x2={handEnd.x} y2={handEnd.y}
-            stroke="var(--color-brand-500)" strokeWidth={2}
+            stroke="var(--accent)" strokeWidth={2}
           />
-          <circle cx={handEnd.x} cy={handEnd.y} r={DOT_RADIUS} fill="var(--color-brand-500)" opacity={0.15} />
+          <circle cx={handEnd.x} cy={handEnd.y} r={DOT_RADIUS} fill="var(--accent)" opacity={0.15} />
           {outerHours.map((h) => {
             const angle = getAngle(h, 12);
             const pos = getPosition(angle, NUMBER_RADIUS);
@@ -184,9 +184,9 @@ const ClockTimePicker: React.FC<Props> = ({ value, onChange, label, size = 'sm' 
           <line
             x1={CLOCK_RADIUS} y1={CLOCK_RADIUS}
             x2={handEnd.x} y2={handEnd.y}
-            stroke="var(--color-brand-500)" strokeWidth={2}
+            stroke="var(--accent)" strokeWidth={2}
           />
-          <circle cx={handEnd.x} cy={handEnd.y} r={DOT_RADIUS} fill="var(--color-brand-500)" opacity={0.15} />
+          <circle cx={handEnd.x} cy={handEnd.y} r={DOT_RADIUS} fill="var(--accent)" opacity={0.15} />
           {MINUTES.map((m) => {
             const angle = getAngle(m, 60);
             const pos = getPosition(angle, NUMBER_RADIUS);
@@ -251,8 +251,8 @@ const ClockTimePicker: React.FC<Props> = ({ value, onChange, label, size = 'sm' 
               className="clock-face"
               onClick={handleClockClick}
             >
-              <circle cx={CLOCK_RADIUS} cy={CLOCK_RADIUS} r={CLOCK_RADIUS - 2} fill="var(--bg-muted)" stroke="var(--color-neutral-300)" strokeWidth={1} />
-              <circle cx={CLOCK_RADIUS} cy={CLOCK_RADIUS} r={3} fill="var(--color-brand-500)" />
+              <circle cx={CLOCK_RADIUS} cy={CLOCK_RADIUS} r={CLOCK_RADIUS - 2} fill="var(--surface-1)" stroke="var(--line-strong)" strokeWidth={1} />
+              <circle cx={CLOCK_RADIUS} cy={CLOCK_RADIUS} r={3} fill="var(--accent)" />
               {renderClockFace()}
             </svg>
 

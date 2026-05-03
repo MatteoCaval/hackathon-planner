@@ -85,7 +85,7 @@ const AccommodationDropdown: React.FC<{
         <div style={{
           position: 'absolute', zIndex: 'var(--z-dropdown)' as unknown as number, width: '100%', top: 'calc(100% + 4px)',
           background: 'var(--bs-body-bg)', border: '1px solid var(--bs-border-color)',
-          borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', maxHeight: 260, overflowY: 'auto'
+          borderRadius: 'var(--r-sm)', boxShadow: 'var(--elev-3)', maxHeight: 260, overflowY: 'auto'
         }}>
           <div
             onClick={() => select('')}
