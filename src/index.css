@@ -1803,8 +1803,13 @@ a:hover { text-decoration: underline; }
   .page { padding: 0 14px 60px; }
   .hero-info { padding: 24px; }
   .hero-title { font-size: 40px; }
+  .hero-stats { grid-template-columns: repeat(2, 1fr); gap: 12px; }
   .group-body { grid-template-columns: 1fr; }
   .dest-switcher { order: 3; flex-basis: 100%; overflow-x: auto; }
+  .section-head { flex-wrap: wrap; }
+  .section-actions { width: 100%; }
+  .flight-bottom { flex-wrap: wrap; }
+  .flight-bottom-right { margin-left: auto; }
 }
 
 /* ================================================================
@@ -2048,10 +2053,10 @@ a:hover { text-decoration: underline; }
   background: var(--surface-0);
   border: 1.5px solid var(--line);
   border-radius: var(--r-pill);
-  overflow: hidden;
   grid-column: 2;
   grid-row: 1;
   box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+  flex-shrink: 0;
 }
 
 .cnt-btn {
@@ -2325,12 +2330,28 @@ a:hover { text-decoration: underline; }
 @media (max-width: 1100px) {
   .budget-strip { grid-template-columns: repeat(3, 1fr); }
   .planner-grid { grid-template-columns: 1fr; }
+  .pc-head { flex-wrap: wrap; }
+  .pc-actions { flex-wrap: wrap; }
 }
 
 @media (max-width: 700px) {
   .budget-strip { grid-template-columns: repeat(2, 1fr); }
-  .assign-row { grid-template-columns: auto 1fr; gap: 8px; }
-  .extra-row { grid-template-columns: 1fr 1fr; }
+  .assign-row {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .ar-counter {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: start;
+  }
+  .ar-subtotal {
+    grid-column: 1;
+    grid-row: auto;
+    text-align: left;
+  }
+  .extra-row { grid-template-columns: 1fr 100px auto auto; }
+  .extra-scope { flex-wrap: nowrap; }
 }
 
 /* Leaflet overrides */

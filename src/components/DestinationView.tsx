@@ -4,6 +4,7 @@ import { DEFAULT_SEARCH_LINKS } from '../utils/bookingLinks';
 import FlightManager from './FlightManager';
 import AccommodationManager from './AccommodationManager';
 import BudgetCalculator from './BudgetCalculator';
+import VoteButton from './VoteButton';
 import { calculateBudgetSnapshot } from '../utils/budget';
 
 interface Props {
@@ -131,7 +132,14 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate, vot
           <div className="hero-stats">
             <div className="hero-stat">
               <div className="label">Interested</div>
-              <div className="value">{destVoters.length}</div>
+              <div className="value" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                {destVoters.length}
+                <VoteButton
+                  voters={destVoters}
+                  currentPerson={currentPerson}
+                  onToggle={() => onToggleVote('destinations', destination.id)}
+                />
+              </div>
             </div>
             <div className="hero-stat">
               <div className="label">Flight options</div>
