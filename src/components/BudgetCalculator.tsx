@@ -260,6 +260,11 @@ const BudgetCalculator: React.FC<Props> = ({
                 return (
                   <label key={acc.id} className={`stay-radio${selectedAccommodationId === acc.id ? ' is-selected' : ''}`}>
                     <input type="radio" name="stay-select" checked={selectedAccommodationId === acc.id} onChange={() => onSelectedAccommodationChange(acc.id)} />
+                    {acc.imageUrl ? (
+                      <img src={acc.imageUrl} alt="" className="sr-thumb" />
+                    ) : (
+                      <div className="sr-thumb sr-thumb-empty"><FaBed size={14} /></div>
+                    )}
                     <div className="sr-content">
                       <div className="sr-name">{acc.description || 'Accommodation'}</div>
                       <div className="sr-meta">

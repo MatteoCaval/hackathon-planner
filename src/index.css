@@ -2154,6 +2154,23 @@ a:hover { text-decoration: underline; }
   flex-shrink: 0;
 }
 
+.sr-thumb {
+  width: 48px;
+  height: 48px;
+  border-radius: var(--r-sm);
+  object-fit: cover;
+  flex-shrink: 0;
+  background: var(--surface-1);
+}
+
+.sr-thumb-empty {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ink-3);
+  border: 1px solid var(--line);
+}
+
 .sr-content { flex: 1; min-width: 0; }
 
 .sr-name {
