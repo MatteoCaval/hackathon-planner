@@ -114,6 +114,7 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate, vot
 
   const flightVoteCount = destination.flights.reduce((sum, f) => sum + (votes.flights[f.id]?.length || 0), 0);
   const accVoteCount = destination.accommodations.reduce((sum, a) => sum + (votes.accommodations[a.id]?.length || 0), 0);
+  const destVoters = votes.destinations[destination.id] || [];
 
   return (
     <>
@@ -129,6 +130,10 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate, vot
           </div>
           <div className="hero-stats">
             <div className="hero-stat">
+              <div className="label">Interested</div>
+              <div className="value">{destVoters.length}</div>
+            </div>
+            <div className="hero-stat">
               <div className="label">Flight options</div>
               <div className="value">{destination.flights.length}</div>
             </div>
@@ -137,7 +142,7 @@ const DestinationView: React.FC<Props> = ({ destination, settings, onUpdate, vot
               <div className="value">{destination.accommodations.length}</div>
             </div>
             <div className="hero-stat">
-              <div className="label">Total votes</div>
+              <div className="label">Item votes</div>
               <div className="value">{flightVoteCount + accVoteCount}</div>
             </div>
           </div>
