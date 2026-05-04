@@ -1,8 +1,8 @@
 import React, { useMemo } from 'react';
-import { Modal, Badge, ProgressBar } from 'react-bootstrap';
+import { Modal } from 'react-bootstrap';
 import { Destination, TripVotes } from '../types';
 import { formatCurrency } from '../utils/budget';
-import { FaMapMarkerAlt, FaPlaneDeparture, FaHotel, FaTrophy } from 'react-icons/fa';
+import { FaPlane, FaBed, FaMapMarkerAlt } from 'react-icons/fa';
 
 interface Props {
   show: boolean;
@@ -12,177 +12,127 @@ interface Props {
   tripMembers: string[];
 }
 
-interface RankedItem {
-  id: string;
-  label: string;
-  sublabel: string;
-  voters: string[];
-  count: number;
-}
+const initials = (name: string) => name.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+const AVATAR_COLORS = ['#3a6b8c', '#5e6b4e', '#b8523a', '#8c5e3a', '#5e3a8c', '#3a8c6b', '#a55c3e', '#4e6b6b'];
+const getColor = (name: string) => AVATAR_COLORS[Math.abs(name.split('').reduce((a, c) => a + c.charCodeAt(0), 0)) % AVATAR_COLORS.length];
 
-const rankItems = (
-  ids: string[],
-  voteMap: Record<string, string[]>,
-  labelFn: (id: string) => { label: string; sublabel: string } | null
-): RankedItem[] => {
-  return ids
-    .map((id) => {
-      const info = labelFn(id);
-      if (!info) return null;
-      const voters = voteMap[id] || [];
-      return { id, label: info.label, sublabel: info.sublabel, voters, count: voters.length };
-    })
-    .filter((item): item is RankedItem => item !== null && item.count > 0)
-    .sort((a, b) => b.count - a.count);
-};
-
-const RankedList: React.FC<{ items: RankedItem[]; maxVotes: number; icon: React.ReactNode; emptyText: string }> = ({ items, maxVotes, icon, emptyText }) => {
-  if (items.length === 0) {
-    return <div className="text-muted small py-2">{emptyText}</div>;
-  }
-
+const AvatarStack: React.FC<{ names: string[]; max?: number }> = ({ names, max = 5 }) => {
+  const visible = names.slice(0, max);
+  const overflow = names.length - visible.length;
   return (
-    <div className="vote-ranked-list">
-      {items.map((item, index) => (
-        <div key={item.id} className="vote-ranked-item">
-          <div className="vote-rank">
-            {index === 0 && item.count > 0 ? (
-              <FaTrophy className="text-warning" size={14} />
-            ) : (
-              <span className="text-muted small">#{index + 1}</span>
-            )}
-          </div>
-          <div className="vote-ranked-info">
-            <div className="d-flex align-items-center gap-2">
-              <span className="opacity-50">{icon}</span>
-              <strong className="text-truncate">{item.label}</strong>
-              <Badge bg={item.count > 0 ? 'primary' : 'secondary'} pill className="ms-auto flex-shrink-0">
-                {item.count} vote{item.count === 1 ? '' : 's'}
-              </Badge>
-            </div>
-            <div className="small text-muted text-truncate">{item.sublabel}</div>
-            {maxVotes > 0 && (
-              <ProgressBar
-                now={item.count}
-                max={maxVotes}
-                variant={index === 0 && item.count > 0 ? 'success' : 'primary'}
-                style={{ height: 4, marginTop: 4 }}
-              />
-            )}
-            {item.voters.length > 0 && (
-              <div className="small text-muted mt-1">{item.voters.join(', ')}</div>
-            )}
-          </div>
-        </div>
+    <span className="stack" style={{ display: 'inline-flex' }}>
+      {visible.map((n) => (
+        <span key={n} className="av" style={{ width: 22, height: 22, background: getColor(n), borderRadius: '50%', marginLeft: -5, border: '2px solid var(--surface-0)', fontSize: 10, display: 'grid', placeItems: 'center', color: 'white', fontWeight: 600 }}>
+          {initials(n)}
+        </span>
       ))}
-    </div>
+      {overflow > 0 && (
+        <span className="av" style={{ width: 22, height: 22, background: 'var(--ink-3)', borderRadius: '50%', marginLeft: -5, border: '2px solid var(--surface-0)', fontSize: 10, display: 'grid', placeItems: 'center', color: 'white', fontWeight: 600 }}>
+          +{overflow}
+        </span>
+      )}
+    </span>
   );
 };
 
-const VoteSummary: React.FC<Props> = ({ show, onHide, destinations, votes, tripMembers }) => {
+const VoteSummary: React.FC<Props> = ({ show, onHide, destinations, votes }) => {
   const allFlights = useMemo(() => destinations.flatMap((d) => d.flights.map((f) => ({ ...f, destName: d.name }))), [destinations]);
   const allAccommodations = useMemo(() => destinations.flatMap((d) => d.accommodations.map((a) => ({ ...a, destName: d.name }))), [destinations]);
 
-  const rankedDestinations = useMemo(() => rankItems(
-    destinations.map((d) => d.id),
-    votes.destinations,
-    (id) => {
-      const d = destinations.find((dest) => dest.id === id);
-      if (!d) return null;
-      return {
-        label: d.name,
-        sublabel: `${d.flights.length} flights, ${d.accommodations.length} stays`
-      };
-    }
-  ), [destinations, votes.destinations]);
+  const destRows = useMemo(() => {
+    return destinations.map((d) => {
+      const flightVotes = d.flights.flatMap((f) => votes.flights[f.id] || []);
+      const accVotes = d.accommodations.flatMap((a) => votes.accommodations[a.id] || []);
+      const destVotes = votes.destinations[d.id] || [];
+      const all = [...destVotes, ...flightVotes, ...accVotes];
+      const uniqueVoters = [...new Set(all)];
+      return { dest: d, total: all.length, voters: uniqueVoters };
+    }).sort((a, b) => b.total - a.total);
+  }, [destinations, votes]);
 
-  const rankedFlights = useMemo(() => rankItems(
-    allFlights.map((f) => f.id),
-    votes.flights,
-    (id) => {
-      const f = allFlights.find((fl) => fl.id === id);
-      if (!f) return null;
-      return {
-        label: f.description || 'Flight Option',
-        sublabel: [f.destName, f.startDate && f.endDate ? `${f.startDate} to ${f.endDate}` : '', formatCurrency(f.pricePerPerson) + '/pp'].filter(Boolean).join(' · ')
-      };
-    }
-  ), [allFlights, votes.flights]);
+  const topFlights = useMemo(() => {
+    return allFlights
+      .map((f) => ({ ...f, voteCount: (votes.flights[f.id] || []).length, voters: votes.flights[f.id] || [] }))
+      .filter((f) => f.voteCount > 0)
+      .sort((a, b) => b.voteCount - a.voteCount)
+      .slice(0, 5);
+  }, [allFlights, votes.flights]);
 
-  const rankedAccommodations = useMemo(() => rankItems(
-    allAccommodations.map((a) => a.id),
-    votes.accommodations,
-    (id) => {
-      const a = allAccommodations.find((acc) => acc.id === id);
-      if (!a) return null;
-      return {
-        label: a.description || 'Accommodation Option',
-        sublabel: [a.destName, a.startDate && a.endDate ? `${a.startDate} to ${a.endDate}` : '', formatCurrency(a.totalPrice) + ' total'].filter(Boolean).join(' · ')
-      };
-    }
-  ), [allAccommodations, votes.accommodations]);
-
-  const maxDestVotes = rankedDestinations[0]?.count || 0;
-  const maxFlightVotes = rankedFlights[0]?.count || 0;
-  const maxAccVotes = rankedAccommodations[0]?.count || 0;
-
-  const totalVoters = tripMembers.length;
-  const votersWhoVoted = useMemo(() => {
-    const names = new Set<string>();
-    for (const voters of Object.values(votes.destinations)) voters.forEach((n) => names.add(n));
-    for (const voters of Object.values(votes.flights)) voters.forEach((n) => names.add(n));
-    for (const voters of Object.values(votes.accommodations)) voters.forEach((n) => names.add(n));
-    return names.size;
-  }, [votes]);
+  const topStays = useMemo(() => {
+    return allAccommodations
+      .map((a) => ({ ...a, voteCount: (votes.accommodations[a.id] || []).length, voters: votes.accommodations[a.id] || [] }))
+      .filter((a) => a.voteCount > 0)
+      .sort((a, b) => b.voteCount - a.voteCount)
+      .slice(0, 5);
+  }, [allAccommodations, votes.accommodations]);
 
   return (
     <Modal show={show} onHide={onHide} size="lg" centered scrollable>
       <Modal.Header closeButton>
-        <Modal.Title>Vote Results</Modal.Title>
+        <Modal.Title>Where the team is leaning</Modal.Title>
       </Modal.Header>
-      <Modal.Body>
-        <div className="d-flex gap-3 mb-4">
-          <Badge bg="light" text="dark" className="px-3 py-2">
-            {totalVoters} member{totalVoters === 1 ? '' : 's'}
-          </Badge>
-          <Badge bg="light" text="dark" className="px-3 py-2">
-            {votersWhoVoted} voted
-          </Badge>
+      <Modal.Body style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 28 }}>
+        {/* Destinations */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <FaMapMarkerAlt size={14} style={{ color: 'var(--accent)' }} />
+            <h5 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 500 }}>Destinations</h5>
+          </div>
+          <div className="leader-rows">
+            {destRows.map((r, i) => (
+              <div key={r.dest.id} className={`leader-row${i === 0 && r.total > 0 ? ' top' : ''}`}>
+                <div className="rank">{i + 1}</div>
+                <div className="info">
+                  <div className="label">{r.dest.name}</div>
+                  <div className="sub">{r.total} total {r.total === 1 ? 'vote' : 'votes'}</div>
+                </div>
+                <AvatarStack names={r.voters} max={5} />
+              </div>
+            ))}
+          </div>
         </div>
 
-        <h6 className="d-flex align-items-center gap-2 mb-3">
-          <FaMapMarkerAlt className="text-primary" /> Destinations
-        </h6>
-        <RankedList
-          items={rankedDestinations}
-          maxVotes={maxDestVotes}
-          icon={<FaMapMarkerAlt size={12} />}
-          emptyText="No destinations to rank."
-        />
+        {/* Top flights */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <FaPlane size={14} style={{ color: 'var(--accent)' }} />
+            <h5 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 500 }}>Top flight options</h5>
+          </div>
+          <div className="leader-rows">
+            {topFlights.map((f, i) => (
+              <div key={f.id} className={`leader-row${i === 0 ? ' top' : ''}`}>
+                <div className="rank">{i + 1}</div>
+                <div className="info">
+                  <div className="label">{f.origin ? `${f.origin} →` : ''} {f.description || 'Flight'} · {formatCurrency(f.pricePerPerson)}</div>
+                  <div className="sub">{f.destName}</div>
+                </div>
+                <AvatarStack names={f.voters} max={5} />
+              </div>
+            ))}
+            {topFlights.length === 0 && <div className="empty"><div className="em-icon">✈</div>No votes on flights yet.</div>}
+          </div>
+        </div>
 
-        <hr />
-
-        <h6 className="d-flex align-items-center gap-2 mb-3">
-          <FaPlaneDeparture className="text-primary" /> Flights
-        </h6>
-        <RankedList
-          items={rankedFlights}
-          maxVotes={maxFlightVotes}
-          icon={<FaPlaneDeparture size={12} />}
-          emptyText="No flights to rank."
-        />
-
-        <hr />
-
-        <h6 className="d-flex align-items-center gap-2 mb-3">
-          <FaHotel className="text-primary" /> Accommodations
-        </h6>
-        <RankedList
-          items={rankedAccommodations}
-          maxVotes={maxAccVotes}
-          icon={<FaHotel size={12} />}
-          emptyText="No accommodations to rank."
-        />
+        {/* Top stays */}
+        <div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12 }}>
+            <FaBed size={14} style={{ color: 'var(--sage)' }} />
+            <h5 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 500 }}>Top stays</h5>
+          </div>
+          <div className="leader-rows">
+            {topStays.map((s, i) => (
+              <div key={s.id} className={`leader-row${i === 0 ? ' top' : ''}`}>
+                <div className="rank">{i + 1}</div>
+                <div className="info">
+                  <div className="label">{s.description || 'Stay'}</div>
+                  <div className="sub">{s.destName} · {formatCurrency(s.totalPrice)}</div>
+                </div>
+                <AvatarStack names={s.voters} max={5} />
+              </div>
+            ))}
+            {topStays.length === 0 && <div className="empty"><div className="em-icon">🏠</div>No votes on stays yet.</div>}
+          </div>
+        </div>
       </Modal.Body>
     </Modal>
   );

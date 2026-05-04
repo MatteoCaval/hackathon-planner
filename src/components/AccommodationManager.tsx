@@ -1,5 +1,5 @@
-import React, { useMemo, useState, useEffect } from 'react';
-import { Table, Button, Form, Card, Modal, InputGroup, Row, Col, Badge } from 'react-bootstrap';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
+import { Modal, Form, Table, Badge, Button, InputGroup } from 'react-bootstrap';
 import { v4 as uuidv4 } from 'uuid';
 import { Accommodation, Flight, SearchLinkTemplate } from '../types';
 import {
@@ -16,8 +16,6 @@ import {
   FaLayerGroup,
   FaSearch,
   FaTimes,
-  FaBed,
-  FaDoorOpen,
   FaLink,
   FaExclamationTriangle
 } from 'react-icons/fa';
@@ -66,18 +64,19 @@ interface ParsedBulkAccommodation {
 type SortBy = 'price' | 'description' | 'startDate' | 'dateAdded';
 type ImageStatus = 'idle' | 'loading' | 'valid' | 'error';
 
-const formatTimeAgo = (timestamp: number): string => {
-  const seconds = Math.floor((Date.now() - timestamp) / 1000);
-  if (seconds < 60) return 'just now';
-  const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
-  const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 30) return `${days}d ago`;
-  const months = Math.floor(days / 30);
-  return `${months}mo ago`;
+const fmtDateRange = (start: string, end: string): string => {
+  if (!start || !end) return `${start || 'No start'} to ${end || 'No end'}`;
+  const da = new Date(start + 'T00:00');
+  const db = new Date(end + 'T00:00');
+  const sameMonth = da.getMonth() === db.getMonth() && da.getFullYear() === db.getFullYear();
+  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+  const aStr = da.toLocaleDateString('en-GB', opts);
+  const bStr = sameMonth ? String(db.getDate()) : db.toLocaleDateString('en-GB', opts);
+  return `${aStr} – ${bStr}`;
 };
+
+const nightsBetween = (a: string, b: string): number =>
+  Math.max(1, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000));
 
 const validateImageUrl = (url: string): Promise<boolean> =>
   new Promise((resolve) => {
@@ -159,6 +158,13 @@ const AccommodationManager: React.FC<Props> = ({
   const [draftImageStatus, setDraftImageStatus] = useState<ImageStatus>('idle');
   const [editImageStatus, setEditImageStatus] = useState<ImageStatus>('idle');
 
+  // Track which group quick-add forms are open
+  const [openQuickAdd, setOpenQuickAdd] = useState<string | null>(null);
+  // Per-group draft state for inline quick-add
+  const [groupDraft, setGroupDraft] = useState<Partial<Accommodation>>({});
+  const [groupAttemptedAdd, setGroupAttemptedAdd] = useState(false);
+  const [groupDraftImageStatus, setGroupDraftImageStatus] = useState<ImageStatus>('idle');
+
   useEffect(() => {
     const url = draft.imageUrl || '';
     if (!url) { setDraftImageStatus('idle'); return; }
@@ -181,8 +187,19 @@ const AccommodationManager: React.FC<Props> = ({
     return () => { cancelled = true; };
   }, [editForm.imageUrl]);
 
-  const quickAddDescriptionRef = React.useRef<HTMLInputElement>(null);
-  const quickAddPriceRef = React.useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    const url = groupDraft.imageUrl || '';
+    if (!url) { setGroupDraftImageStatus('idle'); return; }
+    setGroupDraftImageStatus('loading');
+    let cancelled = false;
+    validateImageUrl(url).then((ok) => {
+      if (!cancelled) setGroupDraftImageStatus(ok ? 'valid' : 'error');
+    });
+    return () => { cancelled = true; };
+  }, [groupDraft.imageUrl]);
+
+  const quickAddDescriptionRef = useRef<HTMLInputElement>(null);
+  const groupDescriptionRef = useRef<HTMLInputElement>(null);
 
   const currentYear = new Date().getFullYear();
   const minDate = `${currentYear}-01-01`;
@@ -253,6 +270,39 @@ const AccommodationManager: React.FC<Props> = ({
     }
   };
 
+  const handleGroupAdd = (startDate: string, endDate: string, focusNext = false) => {
+    setGroupAttemptedAdd(true);
+    const isGroupImageValid = !groupDraft.imageUrl || groupDraftImageStatus === 'valid';
+    if (!(groupDraft.link && typeof groupDraft.totalPrice === 'number' && groupDraft.totalPrice > 0) || !isGroupImageValid) {
+      return;
+    }
+
+    const acc: Accommodation = {
+      id: uuidv4(),
+      link: groupDraft.link,
+      description: groupDraft.description || '',
+      totalPrice: Number(groupDraft.totalPrice),
+      startDate,
+      endDate,
+      ...(groupDraft.imageUrl ? { imageUrl: groupDraft.imageUrl } : {}),
+      createdAt: Date.now(),
+      ...(groupDraft.rooms && groupDraft.rooms > 0 ? { rooms: Math.min(groupDraft.rooms, 50) } : {}),
+      beds: Math.min((groupDraft.beds != null && groupDraft.beds > 0) ? groupDraft.beds : peopleCount, 50)
+    };
+
+    onChange([...accommodations, acc]);
+    setGroupDraft({});
+    setGroupAttemptedAdd(false);
+
+    if (!focusNext) {
+      setOpenQuickAdd(null);
+    } else {
+      setTimeout(() => {
+        groupDescriptionRef.current?.focus();
+      }, 0);
+    }
+  };
+
   const handleRemove = (id: string) => {
     onChange(accommodations.filter((accommodation) => accommodation.id !== id));
   };
@@ -308,25 +358,23 @@ const AccommodationManager: React.FC<Props> = ({
     cancelEdit();
   };
 
-  const handleQuickAddKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== 'Enter') {
-      return;
-    }
-
+  const handleQuickAddKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
+    if (e.key !== 'Enter') return;
     e.preventDefault();
     handleAdd(Boolean(e.metaKey || e.ctrlKey));
   };
 
-  const handlePasteAutofill = async () => {
-    if (!navigator.clipboard?.readText) {
-      return;
-    }
+  const handleGroupQuickAddKeyDown = (e: React.KeyboardEvent<HTMLElement>, startDate: string, endDate: string) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    handleGroupAdd(startDate, endDate, Boolean(e.metaKey || e.ctrlKey));
+  };
 
+  const handlePasteAutofill = async () => {
+    if (!navigator.clipboard?.readText) return;
     const clipboardText = (await navigator.clipboard.readText()).trim();
     const autofill = getUrlAutofill(clipboardText);
-    if (!autofill) {
-      return;
-    }
+    if (!autofill) return;
 
     setDraftValue({
       link: autofill.link,
@@ -338,9 +386,7 @@ const AccommodationManager: React.FC<Props> = ({
   };
 
   const handleBulkImport = () => {
-    if (validBulkAccommodations.length === 0) {
-      return;
-    }
+    if (validBulkAccommodations.length === 0) return;
 
     const importedAccommodations = validBulkAccommodations.map((row) => ({
       id: uuidv4(),
@@ -419,561 +465,720 @@ const AccommodationManager: React.FC<Props> = ({
     });
   }, [displayedAccommodations, groupByDate]);
 
-  const prefillDraftFromGroup = (startDate: string, endDate: string) => {
-    onDraftChange({ ...draft, startDate, endDate });
-    setTimeout(() => {
-      quickAddDescriptionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      quickAddDescriptionRef.current?.focus();
-    }, 50);
-  };
+  const renderEditForm = (accommodation: Accommodation) => (
+    <div className="stay-card is-open" key={accommodation.id}>
+      <div className="stay-card-body" style={{ gap: 8 }}>
+        <div style={{ fontWeight: 600, fontSize: 14, marginBottom: 4 }}>Edit Stay</div>
+        <Form.Control size="sm" placeholder="Description" value={editForm.description || ''} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
+        <DateRangePicker
+          startDate={editForm.startDate || ''}
+          endDate={editForm.endDate || ''}
+          minDate={minDate}
+          onChange={(start, end) => setEditForm({ ...editForm, startDate: start, endDate: end })}
+        />
+        <div className="d-flex gap-2 align-items-center">
+          <Form.Control size="sm" placeholder="Link" value={editForm.link || ''} onChange={(e) => setEditForm({ ...editForm, link: e.target.value })} />
+          {editForm.link && (
+            <a href={editForm.link} target="_blank" rel="noreferrer" className="btn-icon" title="Open link"><FaExternalLinkAlt size={12} /></a>
+          )}
+        </div>
+        <Form.Control size="sm" type="number" step="10" min="0" placeholder="Total price" value={editForm.totalPrice ?? ''} onChange={(e) => setEditForm({ ...editForm, totalPrice: Number(e.target.value) })} />
+        <div>
+          <Form.Control
+            size="sm"
+            placeholder="Image URL (optional)"
+            value={editForm.imageUrl || ''}
+            isInvalid={editImageStatus === 'error'}
+            isValid={editImageStatus === 'valid'}
+            onChange={(e) => setEditForm({ ...editForm, imageUrl: e.target.value })}
+          />
+          {editImageStatus === 'loading' && <div className="small text-muted mt-1">Checking image...</div>}
+          {editImageStatus === 'error' && <div className="small text-danger mt-1">Image could not be loaded.</div>}
+          {editImageStatus === 'valid' && (
+            <img src={editForm.imageUrl} alt="preview" style={{ marginTop: 6, width: 80, height: 56, objectFit: 'cover', borderRadius: 6 }} />
+          )}
+        </div>
+        <div className="d-flex gap-2">
+          <Form.Control size="sm" type="number" min="0" step="1" placeholder="Rooms" value={editForm.rooms ?? ''} onChange={(e) => setEditForm({ ...editForm, rooms: e.target.value === '' ? undefined : Number(e.target.value) })} style={{ width: 80 }} />
+          <Form.Control size="sm" type="number" min="0" step="1" placeholder="Beds" value={editForm.beds ?? ''} onChange={(e) => setEditForm({ ...editForm, beds: e.target.value === '' ? undefined : Number(e.target.value) })} style={{ width: 80 }} />
+        </div>
+        <div className="qa-actions" style={{ marginTop: 4 }}>
+          <button type="button" className="btn btn-sm btn-ghost" onClick={cancelEdit}>Cancel</button>
+          <button type="button" className="btn btn-sm btn-accent" onClick={saveEdit}><FaSave size={11} /> Save</button>
+        </div>
+      </div>
+    </div>
+  );
 
-  const renderAccRow = (accommodation: Accommodation) => (
-    <tr key={accommodation.id}>
-      <td>
-        {editingId === accommodation.id ? (
-          <div className="d-flex flex-column gap-2">
-            <Form.Control size="sm" placeholder="Description" value={editForm.description || ''} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
-            <DateRangePicker
-              startDate={editForm.startDate || ''}
-              endDate={editForm.endDate || ''}
-              minDate={minDate}
-              onChange={(start, end) => setEditForm({ ...editForm, startDate: start, endDate: end })}
-            />
-            <div className="d-flex gap-2 align-items-center">
-              <Form.Control size="sm" placeholder="Link" value={editForm.link || ''} onChange={(e) => setEditForm({ ...editForm, link: e.target.value })} />
-              {editForm.link && (
-                <a href={editForm.link} target="_blank" rel="noreferrer" className="btn btn-sm btn-outline-secondary" title="Open link"><FaExternalLinkAlt size={12} /></a>
-              )}
-            </div>
-            <div>
-              <Form.Control
-                size="sm"
-                placeholder="Image URL (optional)"
-                value={editForm.imageUrl || ''}
-                isInvalid={editImageStatus === 'error'}
-                isValid={editImageStatus === 'valid'}
-                onChange={(e) => setEditForm({ ...editForm, imageUrl: e.target.value })}
-              />
-              {editImageStatus === 'loading' && <div className="small text-muted mt-1">Checking image…</div>}
-              {editImageStatus === 'error' && <div className="small text-danger mt-1">Image could not be loaded. Check the URL.</div>}
-              {editImageStatus === 'valid' && (
-                <img src={editForm.imageUrl} alt="preview" style={{ marginTop: 6, width: 80, height: 56, objectFit: 'cover', borderRadius: 'var(--radius-xs)' }} />
-              )}
-            </div>
-            <div className="d-flex gap-2">
-              <Form.Control size="sm" type="number" min="0" step="1" placeholder="Rooms" value={editForm.rooms ?? ''} onChange={(e) => setEditForm({ ...editForm, rooms: e.target.value === '' ? undefined : Number(e.target.value) })} style={{ width: 80 }} />
-              <Form.Control size="sm" type="number" min="0" step="1" placeholder="Beds" value={editForm.beds ?? ''} onChange={(e) => setEditForm({ ...editForm, beds: e.target.value === '' ? undefined : Number(e.target.value) })} style={{ width: 80 }} />
-            </div>
-          </div>
-        ) : (
-          <div className="d-flex gap-2">
-            {accommodation.imageUrl && (
-              <a href={accommodation.imageUrl} target="_blank" rel="noreferrer" title="View image" style={{ display: 'block', alignSelf: 'stretch', flexShrink: 0 }}>
-                <img
-                  src={accommodation.imageUrl}
-                  alt={accommodation.description || 'Accommodation'}
-                  style={{ width: 72, height: '100%', objectFit: 'cover', borderRadius: 'var(--radius-xs)', display: 'block', border: '1px solid var(--bs-border-color)' }}
-                />
+  const renderStayCard = (accommodation: Accommodation) => {
+    if (editingId === accommodation.id) return renderEditForm(accommodation);
+
+    const voterList = votes[accommodation.id] || [];
+    const isVoted = currentPerson !== '' && voterList.includes(currentPerson);
+    const nights = accommodation.startDate && accommodation.endDate
+      ? nightsBetween(accommodation.startDate, accommodation.endDate) : 0;
+    const perNight = nights > 0 ? accommodation.totalPrice / nights : 0;
+    const perPerson = peopleCount > 0 ? accommodation.totalPrice / peopleCount : 0;
+
+    const metaParts: React.ReactNode[] = [];
+    if (accommodation.rooms != null && accommodation.rooms > 0) {
+      metaParts.push(<span key="rooms">{accommodation.rooms} room{accommodation.rooms !== 1 ? 's' : ''}</span>);
+    }
+    if (accommodation.beds != null && accommodation.beds > 0) {
+      metaParts.push(<span key="beds">{accommodation.beds} bed{accommodation.beds !== 1 ? 's' : ''}</span>);
+    }
+
+    const metaWithPips: React.ReactNode[] = [];
+    metaParts.forEach((part, i) => {
+      if (i > 0) metaWithPips.push(<span key={`pip-${i}`} className="pip" />);
+      metaWithPips.push(part);
+    });
+
+    const perParts: string[] = [];
+    if (perNight > 0) perParts.push(`${formatCurrency(perNight)}/night`);
+    if (perPerson > 0) perParts.push(`${formatCurrency(perPerson)}/person`);
+
+    return (
+      <div key={accommodation.id} className={`stay-card${isVoted ? ' is-voted' : ''}`}>
+        <div
+          className="stay-photo"
+          style={accommodation.imageUrl ? { backgroundImage: `url(${accommodation.imageUrl})` } : undefined}
+        >
+          <div className="photo-actions">
+            {accommodation.link && (
+              <a href={accommodation.link} target="_blank" rel="noreferrer" className="btn-icon" title="Open link" onClick={(e) => e.stopPropagation()} style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(4px)' }}>
+                <FaExternalLinkAlt size={11} />
               </a>
             )}
-            <div>
-              <div className="fw-semibold">{accommodation.description || 'Accommodation Option'}</div>
-              <div className="small subtle-text my-1">
-                {accommodation.startDate || 'No start date'} <span className="mx-1">to</span> {accommodation.endDate || 'No end date'}
-              </div>
-              <div className="d-flex flex-wrap align-items-center gap-2">
-                <a href={accommodation.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-inline-flex align-items-center gap-1">
-                  View Stay <FaExternalLinkAlt size={10} />
-                </a>
-                {accommodation.rooms != null && accommodation.rooms > 0 && (
-                  <span className="small subtle-text d-inline-flex align-items-center gap-1"><FaDoorOpen size={10} /> {accommodation.rooms} room{accommodation.rooms !== 1 ? 's' : ''}</span>
-                )}
-                {accommodation.beds != null && accommodation.beds > 0 && (
-                  <span className="small subtle-text d-inline-flex align-items-center gap-1"><FaBed size={10} /> {accommodation.beds} bed{accommodation.beds !== 1 ? 's' : ''}</span>
-                )}
-                {accommodation.createdAt && (
-                  <span className="small subtle-text" title={new Date(accommodation.createdAt).toLocaleString()}>Added {formatTimeAgo(accommodation.createdAt)}</span>
-                )}
-                {accommodation.updatedAt && (
-                  <span className="small subtle-text" title={new Date(accommodation.updatedAt).toLocaleString()}>Updated {formatTimeAgo(accommodation.updatedAt)}</span>
-                )}
-              </div>
+            <button type="button" className="btn-icon" title="Edit" onClick={() => startEdit(accommodation)} style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(4px)' }}>
+              <FaEdit size={11} />
+            </button>
+            <button type="button" className="btn-icon" title="Clone" onClick={() => handleDuplicate(accommodation)} style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(4px)' }}>
+              <FaClone size={11} />
+            </button>
+            <button type="button" className="btn-icon" title="Delete" onClick={() => handleRemove(accommodation.id)} style={{ background: 'rgba(255,255,255,0.92)', backdropFilter: 'blur(4px)' }}>
+              <FaTrash size={11} />
+            </button>
+          </div>
+        </div>
+
+        <div className="stay-card-body">
+          <div className="stay-name" title={accommodation.description || 'Accommodation Option'}>
+            {accommodation.description || 'Accommodation Option'}
+          </div>
+
+          {metaWithPips.length > 0 && (
+            <div className="stay-meta">{metaWithPips}</div>
+          )}
+
+          <div className="stay-bottom">
+            <div className="stay-price">
+              <span className="amount">{formatCurrency(accommodation.totalPrice)}</span>
+              {perParts.length > 0 && (
+                <span className="per">{perParts.join(' · ')}</span>
+              )}
             </div>
+            <VoteButton
+              voters={voterList}
+              currentPerson={currentPerson}
+              onToggle={() => onToggleVote(accommodation.id)}
+            />
           </div>
-        )}
-      </td>
-      <td style={{ verticalAlign: editingId === accommodation.id ? 'top' : 'middle' }}>
-        {editingId === accommodation.id ? (
-          <Form.Control size="sm" type="number" step="10" min="0" value={editForm.totalPrice} onChange={(e) => setEditForm({ ...editForm, totalPrice: Number(e.target.value) })} />
-        ) : (
-          <strong>{formatCurrency(accommodation.totalPrice)}</strong>
-        )}
-      </td>
-      <td className="text-end" style={{ verticalAlign: editingId === accommodation.id ? 'top' : 'middle' }}>
-        {editingId === accommodation.id ? (
-          <div className="d-flex gap-2 justify-content-end">
-            <Button size="sm" variant="success" onClick={saveEdit} aria-label="Save accommodation changes"><FaSave /></Button>
-            <Button size="sm" variant="outline-secondary" onClick={cancelEdit}>Cancel</Button>
+        </div>
+
+      </div>
+    );
+  };
+
+  const renderGroupQuickAdd = (groupKey: string, startDate: string, endDate: string) => {
+    const isOpen = openQuickAdd === groupKey;
+    const isGroupImageValid = !groupDraft.imageUrl || groupDraftImageStatus === 'valid';
+    const isGroupLinkValid = Boolean(groupDraft.link);
+    const isGroupPriceValid = typeof groupDraft.totalPrice === 'number' && groupDraft.totalPrice > 0;
+
+    if (!isOpen) {
+      return (
+        <div
+          className="quick-add"
+          onClick={() => { setOpenQuickAdd(groupKey); setGroupDraft({}); setGroupAttemptedAdd(false); }}
+        >
+          <FaPlus size={14} />
+          <span>Add stay</span>
+        </div>
+      );
+    }
+
+    return (
+      <div className="quick-add is-open">
+        <div className="qa-grid">
+          <Form.Group>
+            <Form.Label className="small text-muted mb-1">Description</Form.Label>
+            <Form.Control
+              ref={groupDescriptionRef}
+              size="sm"
+              placeholder="Hotel name"
+              value={groupDraft.description || ''}
+              onChange={(e) => setGroupDraft({ ...groupDraft, description: e.target.value })}
+              onKeyDown={(e) => handleGroupQuickAddKeyDown(e, startDate, endDate)}
+              autoFocus
+            />
+          </Form.Group>
+          <Form.Group>
+            <Form.Label className="small text-muted mb-1">Link</Form.Label>
+            <InputGroup size="sm">
+              <Form.Control
+                placeholder="https://..."
+                value={groupDraft.link || ''}
+                isInvalid={groupAttemptedAdd && !isGroupLinkValid}
+                onChange={(e) => setGroupDraft({ ...groupDraft, link: e.target.value })}
+                onKeyDown={(e) => handleGroupQuickAddKeyDown(e, startDate, endDate)}
+              />
+              <Button variant="outline-secondary" size="sm" onClick={async () => {
+                if (!navigator.clipboard?.readText) return;
+                const text = (await navigator.clipboard.readText()).trim();
+                const af = getUrlAutofill(text);
+                if (af) {
+                  setGroupDraft({
+                    ...groupDraft,
+                    link: af.link,
+                    description: groupDraft.description || `${af.providerName} Stay`,
+                    totalPrice: typeof groupDraft.totalPrice === 'number' ? groupDraft.totalPrice : af.amount
+                  });
+                }
+              }} title="Paste and autofill">
+                <FaClipboard size={11} />
+              </Button>
+            </InputGroup>
+          </Form.Group>
+          <Form.Group>
+            <Form.Label className="small text-muted mb-1">Total Price</Form.Label>
+            <Form.Control
+              size="sm"
+              type="number"
+              min="0"
+              step="10"
+              placeholder="0"
+              value={groupDraft.totalPrice ?? ''}
+              isInvalid={groupAttemptedAdd && !isGroupPriceValid}
+              onChange={(e) => setGroupDraft({ ...groupDraft, totalPrice: e.target.value === '' ? undefined : Number(e.target.value) })}
+              onKeyDown={(e) => handleGroupQuickAddKeyDown(e, startDate, endDate)}
+            />
+          </Form.Group>
+          <Form.Group>
+            <Form.Label className="small text-muted mb-1">Image URL</Form.Label>
+            <Form.Control
+              size="sm"
+              placeholder="https://... (optional)"
+              value={groupDraft.imageUrl || ''}
+              isInvalid={groupDraftImageStatus === 'error'}
+              isValid={groupDraftImageStatus === 'valid'}
+              onChange={(e) => setGroupDraft({ ...groupDraft, imageUrl: e.target.value })}
+              onKeyDown={(e) => handleGroupQuickAddKeyDown(e, startDate, endDate)}
+            />
+          </Form.Group>
+          <div className="d-flex gap-2">
+            <Form.Group style={{ flex: 1 }}>
+              <Form.Label className="small text-muted mb-1">Rooms</Form.Label>
+              <Form.Control
+                size="sm"
+                type="number"
+                min="0"
+                step="1"
+                placeholder="--"
+                value={groupDraft.rooms ?? ''}
+                onChange={(e) => setGroupDraft({ ...groupDraft, rooms: e.target.value === '' ? undefined : Number(e.target.value) })}
+                onKeyDown={(e) => handleGroupQuickAddKeyDown(e, startDate, endDate)}
+              />
+            </Form.Group>
+            <Form.Group style={{ flex: 1 }}>
+              <Form.Label className="small text-muted mb-1">Beds</Form.Label>
+              <Form.Control
+                size="sm"
+                type="number"
+                min="0"
+                step="1"
+                placeholder="--"
+                value={groupDraft.beds ?? peopleCount}
+                onChange={(e) => setGroupDraft({ ...groupDraft, beds: e.target.value === '' ? undefined : Number(e.target.value) })}
+                onKeyDown={(e) => handleGroupQuickAddKeyDown(e, startDate, endDate)}
+              />
+            </Form.Group>
           </div>
-        ) : (
-          <div className="d-flex align-items-center gap-2 justify-content-end">
-            <VoteButton voters={votes[accommodation.id] || []} currentPerson={currentPerson} onToggle={() => onToggleVote(accommodation.id)} />
-            <Button variant="link" className="text-secondary p-0" onClick={() => startEdit(accommodation)} aria-label="Edit accommodation option"><FaEdit /></Button>
-            <Button variant="link" className="text-secondary p-0" onClick={() => handleDuplicate(accommodation)} aria-label="Duplicate accommodation option"><FaClone /></Button>
-            <Button variant="link" className="text-danger p-0" onClick={() => handleRemove(accommodation.id)} aria-label="Remove accommodation option"><FaTrash /></Button>
-          </div>
+        </div>
+
+        {groupAttemptedAdd && !isGroupLinkValid && (
+          <div className="inline-status error" role="status">A booking link is required.</div>
         )}
-      </td>
-    </tr>
-  );
+        {groupAttemptedAdd && !isGroupPriceValid && (
+          <div className="inline-status error" role="status">A total price greater than 0 is required.</div>
+        )}
+        {groupAttemptedAdd && !isGroupImageValid && (
+          <div className="inline-status error" role="status">Image URL could not be loaded -- fix or remove it.</div>
+        )}
+
+        <div className="qa-actions">
+          <span className="qa-hint">Enter to save, Cmd+Enter to save &amp; keep adding</span>
+          <button type="button" className="btn btn-sm btn-ghost" onClick={() => { setOpenQuickAdd(null); setGroupDraft({}); setGroupAttemptedAdd(false); }}>Cancel</button>
+          <button type="button" className="btn btn-sm btn-accent" onClick={() => handleGroupAdd(startDate, endDate, false)}>
+            <FaPlus size={11} /> Add
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  const renderGroupSearchLinks = (group: AccommodationGroup) => {
+    const groupSearchLinks = getAccommodationSearchLinks(searchLinks, destinationName, group.startDate, group.endDate, peopleCount);
+    const groupCustomLinks = customGroupLinks[group.key] || {};
+
+    return (
+      <div className="search-links">
+        {groupSearchLinks.map((sl) => {
+          const linkId = searchLinks.find((t) => t.label === sl.label)?.id || sl.label;
+          const customUrl = groupCustomLinks[linkId];
+          const isEditing = editingGroupLink?.groupKey === group.key && editingGroupLink?.linkId === linkId;
+
+          if (isEditing) {
+            return (
+              <InputGroup key={sl.label} size="sm" style={{ width: 320 }}>
+                <Form.Control
+                  size="sm"
+                  placeholder={`Custom ${sl.label} URL`}
+                  value={editingGroupLink.url}
+                  onChange={(e) => setEditingGroupLink({ ...editingGroupLink, url: e.target.value })}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      const url = editingGroupLink.url.trim();
+                      const next = { ...customGroupLinks };
+                      if (url) {
+                        next[group.key] = { ...groupCustomLinks, [linkId]: url };
+                      } else {
+                        const { [linkId]: _, ...rest } = groupCustomLinks;
+                        if (Object.keys(rest).length > 0) {
+                          next[group.key] = rest;
+                        } else {
+                          delete next[group.key];
+                        }
+                      }
+                      onCustomGroupLinksChange(next);
+                      setEditingGroupLink(null);
+                    } else if (e.key === 'Escape') {
+                      setEditingGroupLink(null);
+                    }
+                  }}
+                  autoFocus
+                />
+                <Button variant="outline-success" size="sm" title="Save" onClick={() => {
+                  const url = editingGroupLink.url.trim();
+                  const next = { ...customGroupLinks };
+                  if (url) {
+                    next[group.key] = { ...groupCustomLinks, [linkId]: url };
+                  } else {
+                    const { [linkId]: _, ...rest } = groupCustomLinks;
+                    if (Object.keys(rest).length > 0) {
+                      next[group.key] = rest;
+                    } else {
+                      delete next[group.key];
+                    }
+                  }
+                  onCustomGroupLinksChange(next);
+                  setEditingGroupLink(null);
+                }}>
+                  <FaSave size={10} />
+                </Button>
+                <Button variant="outline-secondary" size="sm" title="Cancel" onClick={() => setEditingGroupLink(null)}>
+                  <FaTimes size={10} />
+                </Button>
+              </InputGroup>
+            );
+          }
+
+          return (
+            <div key={sl.label} style={{ display: 'inline-flex', gap: 0 }}>
+              <a href={customUrl || sl.url} target="_blank" rel="noreferrer" className="link-chip" title={customUrl ? 'Custom link' : 'Auto-generated link'}>
+                <FaSearch size={10} /> {sl.label}
+              </a>
+              <button
+                type="button"
+                className="btn-icon"
+                style={{ width: 24, height: 24, fontSize: 10 }}
+                title="Edit link"
+                onClick={() => setEditingGroupLink({ groupKey: group.key, linkId, url: customUrl || sl.url })}
+              >
+                <FaEdit size={10} />
+              </button>
+            </div>
+          );
+        })}
+      </div>
+    );
+  };
 
   return (
     <>
-      <Card className="workspace-card manager-card">
-        <Card.Header className="workspace-card-header">
-          <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-            <div className="d-flex align-items-center gap-2">
-              <FaHotel className="text-primary" aria-hidden="true" />
-              <h2 className="workspace-card-title m-0">Accommodation Options</h2>
-              <Badge bg="light" text="dark">{accommodations.length}</Badge>
-            </div>
-            <Button size="sm" variant="outline-secondary" onClick={() => setShowBulkModal(true)}>
-              <FaListUl className="me-1" /> Bulk Add
-            </Button>
-          </div>
-
-          {(stayLinks.length > 0 || showAddStayLink) && (
-            <div className="d-flex flex-wrap align-items-center gap-2 mb-3">
-              {stayLinks.map((sl, i) => (
-                editingStayLinkIndex === i ? (
-                  <InputGroup key={i} size="sm" style={{ width: 360 }}>
-                    <Form.Control size="sm" placeholder="Label" value={editStayLink.label} onChange={(e) => setEditStayLink({ ...editStayLink, label: e.target.value })} style={{ maxWidth: 100 }} />
-                    <Form.Control
-                      size="sm"
-                      placeholder="URL"
-                      value={editStayLink.url}
-                      onChange={(e) => setEditStayLink({ ...editStayLink, url: e.target.value })}
-                      onKeyDown={(e) => {
-                        if (e.key === 'Enter' && editStayLink.label.trim() && editStayLink.url.trim()) {
+      <div className="section">
+        {/* Section header */}
+        <div className="section-head">
+          <h2 className="section-title">Stays</h2>
+          <span className="section-sub">{accommodations.length} option{accommodations.length !== 1 ? 's' : ''}</span>
+          <div className="section-actions">
+            {(stayLinks.length > 0 || showAddStayLink) && (
+              <>
+                {stayLinks.map((sl, i) => (
+                  editingStayLinkIndex === i ? (
+                    <InputGroup key={i} size="sm" style={{ width: 320 }}>
+                      <Form.Control size="sm" placeholder="Label" value={editStayLink.label} onChange={(e) => setEditStayLink({ ...editStayLink, label: e.target.value })} style={{ maxWidth: 100 }} />
+                      <Form.Control
+                        size="sm"
+                        placeholder="URL"
+                        value={editStayLink.url}
+                        onChange={(e) => setEditStayLink({ ...editStayLink, url: e.target.value })}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter' && editStayLink.label.trim() && editStayLink.url.trim()) {
+                            const next = [...stayLinks];
+                            next[i] = { label: editStayLink.label.trim(), url: editStayLink.url.trim() };
+                            onStayLinksChange(next);
+                            setEditingStayLinkIndex(null);
+                          } else if (e.key === 'Escape') {
+                            setEditingStayLinkIndex(null);
+                          }
+                        }}
+                      />
+                      <Button variant="outline-success" size="sm" onClick={() => {
+                        if (editStayLink.label.trim() && editStayLink.url.trim()) {
                           const next = [...stayLinks];
                           next[i] = { label: editStayLink.label.trim(), url: editStayLink.url.trim() };
                           onStayLinksChange(next);
                           setEditingStayLinkIndex(null);
+                        }
+                      }}><FaSave size={10} /></Button>
+                      <Button variant="outline-danger" size="sm" onClick={() => {
+                        onStayLinksChange(stayLinks.filter((_, j) => j !== i));
+                        setEditingStayLinkIndex(null);
+                      }}><FaTrash size={10} /></Button>
+                      <Button variant="outline-secondary" size="sm" onClick={() => setEditingStayLinkIndex(null)}><FaTimes size={10} /></Button>
+                    </InputGroup>
+                  ) : (
+                    <div key={i} style={{ display: 'inline-flex', gap: 0 }}>
+                      <a href={sl.url} target="_blank" rel="noreferrer" className="link-chip">
+                        <FaLink size={10} /> {sl.label}
+                      </a>
+                      <button type="button" className="btn-icon" style={{ width: 24, height: 24, fontSize: 10 }} title="Edit link" onClick={() => { setEditingStayLinkIndex(i); setEditStayLink(sl); }}>
+                        <FaEdit size={10} />
+                      </button>
+                    </div>
+                  )
+                ))}
+                {showAddStayLink && (
+                  <InputGroup size="sm" style={{ width: 320 }}>
+                    <Form.Control size="sm" placeholder="Label" value={newStayLink.label} onChange={(e) => setNewStayLink({ ...newStayLink, label: e.target.value })} style={{ maxWidth: 100 }} autoFocus />
+                    <Form.Control
+                      size="sm"
+                      placeholder="URL"
+                      value={newStayLink.url}
+                      onChange={(e) => setNewStayLink({ ...newStayLink, url: e.target.value })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && newStayLink.label.trim() && newStayLink.url.trim()) {
+                          onStayLinksChange([...stayLinks, { label: newStayLink.label.trim(), url: newStayLink.url.trim() }]);
+                          setNewStayLink({ label: '', url: '' });
+                          setShowAddStayLink(false);
                         } else if (e.key === 'Escape') {
-                          setEditingStayLinkIndex(null);
+                          setShowAddStayLink(false);
+                          setNewStayLink({ label: '', url: '' });
                         }
                       }}
                     />
                     <Button variant="outline-success" size="sm" onClick={() => {
-                      if (editStayLink.label.trim() && editStayLink.url.trim()) {
-                        const next = [...stayLinks];
-                        next[i] = { label: editStayLink.label.trim(), url: editStayLink.url.trim() };
-                        onStayLinksChange(next);
-                        setEditingStayLinkIndex(null);
-                      }
-                    }}><FaSave size={10} /></Button>
-                    <Button variant="outline-danger" size="sm" onClick={() => {
-                      onStayLinksChange(stayLinks.filter((_, j) => j !== i));
-                      setEditingStayLinkIndex(null);
-                    }}><FaTrash size={10} /></Button>
-                    <Button variant="outline-secondary" size="sm" onClick={() => setEditingStayLinkIndex(null)}><FaTimes size={10} /></Button>
-                  </InputGroup>
-                ) : (
-                  <div key={i} className="btn-group btn-group-sm">
-                    <a href={sl.url} target="_blank" rel="noreferrer" className="btn btn-outline-info d-inline-flex align-items-center gap-1">
-                      <FaLink size={10} /> {sl.label}
-                    </a>
-                    <button type="button" className="btn btn-outline-info" title="Edit link" onClick={() => { setEditingStayLinkIndex(i); setEditStayLink(sl); }}>
-                      <FaEdit size={10} />
-                    </button>
-                  </div>
-                )
-              ))}
-              {showAddStayLink && (
-                <InputGroup size="sm" style={{ width: 360 }}>
-                  <Form.Control size="sm" placeholder="Label" value={newStayLink.label} onChange={(e) => setNewStayLink({ ...newStayLink, label: e.target.value })} style={{ maxWidth: 100 }} autoFocus />
-                  <Form.Control
-                    size="sm"
-                    placeholder="URL"
-                    value={newStayLink.url}
-                    onChange={(e) => setNewStayLink({ ...newStayLink, url: e.target.value })}
-                    onKeyDown={(e) => {
-                      if (e.key === 'Enter' && newStayLink.label.trim() && newStayLink.url.trim()) {
+                      if (newStayLink.label.trim() && newStayLink.url.trim()) {
                         onStayLinksChange([...stayLinks, { label: newStayLink.label.trim(), url: newStayLink.url.trim() }]);
                         setNewStayLink({ label: '', url: '' });
                         setShowAddStayLink(false);
-                      } else if (e.key === 'Escape') {
-                        setShowAddStayLink(false);
-                        setNewStayLink({ label: '', url: '' });
                       }
-                    }}
-                  />
-                  <Button variant="outline-success" size="sm" onClick={() => {
-                    if (newStayLink.label.trim() && newStayLink.url.trim()) {
-                      onStayLinksChange([...stayLinks, { label: newStayLink.label.trim(), url: newStayLink.url.trim() }]);
-                      setNewStayLink({ label: '', url: '' });
-                      setShowAddStayLink(false);
-                    }
-                  }}><FaSave size={10} /></Button>
-                  <Button variant="outline-secondary" size="sm" onClick={() => { setShowAddStayLink(false); setNewStayLink({ label: '', url: '' }); }}><FaTimes size={10} /></Button>
-                </InputGroup>
-              )}
-            </div>
-          )}
-          <div className="d-flex flex-wrap align-items-center gap-2 mb-2">
-            <span className="subtle-text">Quick add (Enter to save, Cmd/Ctrl + Enter to save and keep typing).</span>
-            {!showAddStayLink && (
-              <Button size="sm" variant="outline-info" className="d-inline-flex align-items-center gap-1" onClick={() => setShowAddStayLink(true)}>
-                <FaPlus size={10} /> <FaLink size={10} /> Add list
-              </Button>
+                    }}><FaSave size={10} /></Button>
+                    <Button variant="outline-secondary" size="sm" onClick={() => { setShowAddStayLink(false); setNewStayLink({ label: '', url: '' }); }}><FaTimes size={10} /></Button>
+                  </InputGroup>
+                )}
+              </>
             )}
+            {!showAddStayLink && (
+              <button type="button" className="btn btn-sm btn-ghost" onClick={() => setShowAddStayLink(true)}>
+                <FaPlus size={10} /> <FaLink size={10} /> Add list
+              </button>
+            )}
+            <button type="button" className="btn btn-sm btn-outline" onClick={() => setShowBulkModal(true)}>
+              <FaListUl size={11} /> Bulk
+            </button>
           </div>
-          <div className="manager-quick-add-grid">
-            <Form.Group>
-              <Form.Label className="small text-muted mb-1">Description</Form.Label>
-              <Form.Control
-                ref={quickAddDescriptionRef}
-                size="sm"
-                placeholder="City Center Hotel"
-                value={draft.description || ''}
-                onChange={(e) => setDraftValue({ description: e.target.value })}
-                onKeyDown={handleQuickAddKeyDown}
-                aria-label="Accommodation description"
-              />
-            </Form.Group>
+        </div>
 
-            <div>
+        {/* Filters and sort */}
+        <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'flex-end', marginBottom: 18 }}>
+          <Form.Group style={{ flex: '1 1 200px', maxWidth: 280 }}>
+            <Form.Label className="small text-muted mb-1">Search</Form.Label>
+            <Form.Control
+              size="sm"
+              placeholder="Filter by description or link"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+            />
+          </Form.Group>
+          <Form.Group style={{ flex: '0 1 140px' }}>
+            <Form.Label className="small text-muted mb-1">Max total</Form.Label>
+            <InputGroup size="sm">
+              <InputGroup.Text><FaFilter size={10} /></InputGroup.Text>
+              <Form.Control
+                type="number"
+                min="0"
+                step="10"
+                value={maxPrice}
+                onChange={(e) => setMaxPrice(e.target.value)}
+              />
+            </InputGroup>
+          </Form.Group>
+          <Form.Group style={{ flex: '0 1 120px' }}>
+            <Form.Label className="small text-muted mb-1">Sort by</Form.Label>
+            <Form.Select size="sm" value={sortBy} onChange={(e) => setSortBy(e.target.value as SortBy)}>
+              <option value="price">Price</option>
+              <option value="description">Name</option>
+              <option value="startDate">Start date</option>
+              <option value="dateAdded">Date added</option>
+            </Form.Select>
+          </Form.Group>
+          <Form.Group style={{ flex: '0 1 90px' }}>
+            <Form.Label className="small text-muted mb-1">Direction</Form.Label>
+            <Form.Select size="sm" value={sortDirection} onChange={(e) => setSortDirection(e.target.value as 'asc' | 'desc')}>
+              <option value="asc">Asc</option>
+              <option value="desc">Desc</option>
+            </Form.Select>
+          </Form.Group>
+          <button
+            type="button"
+            className={`btn btn-sm ${groupByDate ? 'btn-accent' : 'btn-outline'}`}
+            onClick={() => setGroupByDate(!groupByDate)}
+            style={{ alignSelf: 'flex-end', marginBottom: 1 }}
+          >
+            <FaLayerGroup size={11} /> Group
+          </button>
+        </div>
+
+        {/* Top-level quick add (always visible) */}
+        <div className="group" style={{ marginBottom: 20 }}>
+          <div className="group-head" style={{ borderBottom: 'none' }}>
+            <div className="dates"><FaHotel size={14} /> Add Stay</div>
+          </div>
+          <div style={{ padding: '0 20px 18px' }}>
+            <div className="qa-grid" style={{ marginBottom: 10 }}>
+              <Form.Group>
+                <Form.Label className="small text-muted mb-1">Description</Form.Label>
+                <Form.Control
+                  ref={quickAddDescriptionRef}
+                  size="sm"
+                  placeholder="City Center Hotel"
+                  value={draft.description || ''}
+                  onChange={(e) => setDraftValue({ description: e.target.value })}
+                  onKeyDown={handleQuickAddKeyDown}
+                />
+              </Form.Group>
+
               <DateRangePicker
                 startDate={draft.startDate || ''}
                 endDate={draft.endDate || ''}
                 minDate={minDate}
                 onChange={(start, end) => setDraftValue({ startDate: start, endDate: end })}
               />
-              {suggestedDateRanges.length > 0 && !draft.startDate && !draft.endDate && (
-                <div className="d-flex flex-wrap gap-1 mt-1">
-                  <span className="small text-muted" style={{ lineHeight: '24px' }}>From flights:</span>
-                  {suggestedDateRanges.map((r) => (
-                    <Badge
-                      key={`${r.startDate}|${r.endDate}`}
-                      bg="info"
-                      className="fw-normal"
-                      role="button"
-                      style={{ cursor: 'pointer', fontSize: '0.75rem' }}
-                      onClick={() => setDraftValue({ startDate: r.startDate, endDate: r.endDate })}
-                    >
-                      {r.label}
-                    </Badge>
-                  ))}
-                </div>
-              )}
-            </div>
 
-            <Form.Group>
-              <Form.Label className="small text-muted mb-1">Link</Form.Label>
-              <InputGroup size="sm">
-                <Form.Control
-                  placeholder="https://..."
-                  value={draft.link || ''}
-                  isInvalid={attemptedAdd && !isDraftLinkValid}
-                  onChange={(e) => setDraftValue({ link: e.target.value })}
-                  onKeyDown={handleQuickAddKeyDown}
-                  aria-label="Accommodation booking link"
-                />
-                <Button variant="outline-secondary" onClick={handlePasteAutofill} title="Paste URL and autofill fields">
-                  <FaClipboard />
-                </Button>
-              </InputGroup>
-            </Form.Group>
+              <Form.Group>
+                <Form.Label className="small text-muted mb-1">Link</Form.Label>
+                <InputGroup size="sm">
+                  <Form.Control
+                    placeholder="https://..."
+                    value={draft.link || ''}
+                    isInvalid={attemptedAdd && !isDraftLinkValid}
+                    onChange={(e) => setDraftValue({ link: e.target.value })}
+                    onKeyDown={handleQuickAddKeyDown}
+                  />
+                  <Button variant="outline-secondary" size="sm" onClick={handlePasteAutofill} title="Paste URL and autofill fields">
+                    <FaClipboard size={11} />
+                  </Button>
+                </InputGroup>
+              </Form.Group>
 
-            <Form.Group>
-              <Form.Label className="small text-muted mb-1">Total Price</Form.Label>
-              <Form.Control
-                ref={quickAddPriceRef}
-                size="sm"
-                type="number"
-                inputMode="numeric"
-                step="10"
-                min="0"
-                placeholder="0"
-                value={draft.totalPrice ?? ''}
-                isInvalid={attemptedAdd && !isDraftPriceValid}
-                onChange={(e) => setDraftValue({ totalPrice: e.target.value === '' ? undefined : Number(e.target.value) })}
-                onKeyDown={handleQuickAddKeyDown}
-                aria-label="Accommodation total price"
-              />
-            </Form.Group>
-
-            <Form.Group>
-              <Form.Label className="small text-muted mb-1">Image URL</Form.Label>
-              <Form.Control
-                size="sm"
-                placeholder="https://... (optional)"
-                value={draft.imageUrl || ''}
-                isInvalid={draftImageStatus === 'error'}
-                isValid={draftImageStatus === 'valid'}
-                onChange={(e) => setDraftValue({ imageUrl: e.target.value })}
-                onKeyDown={handleQuickAddKeyDown}
-                aria-label="Accommodation image URL"
-              />
-              {draftImageStatus === 'loading' && <div className="small text-muted mt-1">Checking image…</div>}
-              {draftImageStatus === 'error' && <div className="small text-danger mt-1">Image could not be loaded. Check the URL.</div>}
-              {draftImageStatus === 'valid' && (
-                <img src={draft.imageUrl} alt="preview" style={{ marginTop: 6, width: 80, height: 56, objectFit: 'cover', borderRadius: 'var(--radius-xs)' }} />
-              )}
-            </Form.Group>
-
-            <div className="d-flex gap-2">
-              <Form.Group style={{ flex: 1 }}>
-                <Form.Label className="small text-muted mb-1">Rooms</Form.Label>
+              <Form.Group>
+                <Form.Label className="small text-muted mb-1">Total Price</Form.Label>
                 <Form.Control
                   size="sm"
                   type="number"
+                  inputMode="numeric"
+                  step="10"
                   min="0"
-                  step="1"
-                  placeholder="—"
-                  value={draft.rooms ?? ''}
-                  onChange={(e) => setDraftValue({ rooms: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  placeholder="0"
+                  value={draft.totalPrice ?? ''}
+                  isInvalid={attemptedAdd && !isDraftPriceValid}
+                  onChange={(e) => setDraftValue({ totalPrice: e.target.value === '' ? undefined : Number(e.target.value) })}
                   onKeyDown={handleQuickAddKeyDown}
-                  aria-label="Number of rooms"
                 />
               </Form.Group>
-              <Form.Group style={{ flex: 1 }}>
-                <Form.Label className="small text-muted mb-1">Beds</Form.Label>
+
+              <Form.Group>
+                <Form.Label className="small text-muted mb-1">Image URL</Form.Label>
                 <Form.Control
                   size="sm"
-                  type="number"
-                  min="0"
-                  step="1"
-                  placeholder="—"
-                  value={draft.beds ?? peopleCount}
-                  onChange={(e) => setDraftValue({ beds: e.target.value === '' ? undefined : Number(e.target.value) })}
+                  placeholder="https://... (optional)"
+                  value={draft.imageUrl || ''}
+                  isInvalid={draftImageStatus === 'error'}
+                  isValid={draftImageStatus === 'valid'}
+                  onChange={(e) => setDraftValue({ imageUrl: e.target.value })}
                   onKeyDown={handleQuickAddKeyDown}
-                  aria-label="Number of beds"
                 />
+                {draftImageStatus === 'loading' && <div className="small text-muted mt-1">Checking image...</div>}
+                {draftImageStatus === 'error' && <div className="small text-danger mt-1">Image could not be loaded.</div>}
+                {draftImageStatus === 'valid' && (
+                  <img src={draft.imageUrl} alt="preview" style={{ marginTop: 6, width: 80, height: 56, objectFit: 'cover', borderRadius: 6 }} />
+                )}
               </Form.Group>
+
+              <div className="d-flex gap-2">
+                <Form.Group style={{ flex: 1 }}>
+                  <Form.Label className="small text-muted mb-1">Rooms</Form.Label>
+                  <Form.Control
+                    size="sm"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="--"
+                    value={draft.rooms ?? ''}
+                    onChange={(e) => setDraftValue({ rooms: e.target.value === '' ? undefined : Number(e.target.value) })}
+                    onKeyDown={handleQuickAddKeyDown}
+                  />
+                </Form.Group>
+                <Form.Group style={{ flex: 1 }}>
+                  <Form.Label className="small text-muted mb-1">Beds</Form.Label>
+                  <Form.Control
+                    size="sm"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="--"
+                    value={draft.beds ?? peopleCount}
+                    onChange={(e) => setDraftValue({ beds: e.target.value === '' ? undefined : Number(e.target.value) })}
+                    onKeyDown={handleQuickAddKeyDown}
+                  />
+                </Form.Group>
+              </div>
             </div>
-          </div>
 
-          {attemptedAdd && !isDraftLinkValid && (
-            <div className="inline-status error" role="status">A booking link is required.</div>
-          )}
-          {attemptedAdd && !isDraftPriceValid && (
-            <div className="inline-status error" role="status">A total price greater than 0 is required.</div>
-          )}
-          {attemptedAdd && !isDraftImageValid && (
-            <div className="inline-status error" role="status">Image URL could not be loaded — fix or remove it.</div>
-          )}
+            {attemptedAdd && !isDraftLinkValid && (
+              <div className="inline-status error" role="status">A booking link is required.</div>
+            )}
+            {attemptedAdd && !isDraftPriceValid && (
+              <div className="inline-status error" role="status">A total price greater than 0 is required.</div>
+            )}
+            {attemptedAdd && !isDraftImageValid && (
+              <div className="inline-status error" role="status">Image URL could not be loaded -- fix or remove it.</div>
+            )}
 
-          <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mt-3">
-            <div className="d-flex flex-wrap gap-2">
+            {suggestedDateRanges.length > 0 && !draft.startDate && !draft.endDate && (
+              <div className="d-flex flex-wrap gap-1 mb-2">
+                <span className="small text-muted" style={{ lineHeight: '24px' }}>From flights:</span>
+                {suggestedDateRanges.map((r) => (
+                  <Badge
+                    key={`${r.startDate}|${r.endDate}`}
+                    bg="info"
+                    className="fw-normal"
+                    role="button"
+                    style={{ cursor: 'pointer', fontSize: '0.75rem' }}
+                    onClick={() => setDraftValue({ startDate: r.startDate, endDate: r.endDate })}
+                  >
+                    {r.label}
+                  </Badge>
+                ))}
+              </div>
+            )}
+
+            <div className="qa-actions">
+              <span className="qa-hint">Enter to save, Cmd+Enter to save &amp; keep adding</span>
               {draftSearchLinks.map((sl) => (
-                <a key={sl.label} href={sl.url} target="_blank" rel="noreferrer" className="btn btn-outline-warning btn-sm d-inline-flex align-items-center gap-1" title="Search accommodation for selected dates">
+                <a key={sl.label} href={sl.url} target="_blank" rel="noreferrer" className="link-chip" title="Search for selected dates">
                   <FaSearch size={10} /> {sl.label}
                 </a>
               ))}
-            </div>
-            <Button size="sm" variant="primary" onClick={() => handleAdd(false)}>
-              <FaPlus className="me-1" /> Add Accommodation
-            </Button>
-          </div>
-        </Card.Header>
-
-        <Card.Body className="p-0">
-          <div className="manager-controls">
-            <Row className="g-2 align-items-end">
-              <Col md={5}>
-                <Form.Label className="small text-muted mb-1">Search</Form.Label>
-                <Form.Control
-                  size="sm"
-                  placeholder="Filter by description or link"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  aria-label="Search accommodation options"
-                />
-              </Col>
-              <Col md={3}>
-                <Form.Label className="small text-muted mb-1">Max total</Form.Label>
-                <InputGroup size="sm">
-                  <InputGroup.Text><FaFilter /></InputGroup.Text>
-                  <Form.Control
-                    type="number"
-                    min="0"
-                    step="10"
-                    value={maxPrice}
-                    onChange={(event) => setMaxPrice(event.target.value)}
-                    aria-label="Filter by max accommodation price"
-                  />
-                </InputGroup>
-              </Col>
-              <Col md={2}>
-                <Form.Label className="small text-muted mb-1">Sort by</Form.Label>
-                <Form.Select size="sm" value={sortBy} onChange={(event) => setSortBy(event.target.value as SortBy)} aria-label="Sort accommodation by">
-                  <option value="price">Price</option>
-                  <option value="description">Name</option>
-                  <option value="startDate">Start date</option>
-                  <option value="dateAdded">Date added</option>
-                </Form.Select>
-              </Col>
-              <Col md={2}>
-                <Form.Label className="small text-muted mb-1">Direction</Form.Label>
-                <Form.Select size="sm" value={sortDirection} onChange={(event) => setSortDirection(event.target.value as 'asc' | 'desc')} aria-label="Sort order">
-                  <option value="asc">Asc</option>
-                  <option value="desc">Desc</option>
-                </Form.Select>
-              </Col>
-            </Row>
-            <div className="mt-2">
-              <Button
-                size="sm"
-                variant={groupByDate ? 'primary' : 'outline-secondary'}
-                onClick={() => setGroupByDate(!groupByDate)}
-                className="d-inline-flex align-items-center gap-1"
-              >
-                <FaLayerGroup /> Group by dates
-              </Button>
+              <button type="button" className="btn btn-sm btn-accent" onClick={() => handleAdd(false)}>
+                <FaPlus size={11} /> Add
+              </button>
             </div>
           </div>
+        </div>
 
-          <Table hover responsive className="mb-0 align-middle manager-table">
-            <thead>
-              <tr>
-                <th style={{ width: '52%' }}>Option</th>
-                <th style={{ width: '18%' }}>Total</th>
-                <th style={{ width: '30%' }} />
-              </tr>
-            </thead>
-            <tbody>
-              {groupByDate ? (
-                <>
-                  {accGroups.map((group) => {
-                    const groupSearchLinks = getAccommodationSearchLinks(searchLinks, destinationName, group.startDate, group.endDate, peopleCount);
-                    const groupCustomLinks = customGroupLinks[group.key] || {};
-                    return (
-                      <React.Fragment key={group.key}>
-                        <tr className="table-light">
-                          <td colSpan={3}>
-                            <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 py-1">
-                              <div className="d-flex align-items-center gap-2">
-                                <strong>{group.label}</strong>
-                                <Badge bg="secondary" pill>{group.accommodations.length}</Badge>
-                              </div>
-                              <div className="d-flex flex-wrap gap-2 align-items-center">
-                                {groupSearchLinks.map((sl) => {
-                                  const linkId = searchLinks.find((t) => t.label === sl.label)?.id || sl.label;
-                                  const customUrl = groupCustomLinks[linkId];
-                                  const isEditing = editingGroupLink?.groupKey === group.key && editingGroupLink?.linkId === linkId;
-
-                                  if (isEditing) {
-                                    return (
-                                      <InputGroup key={sl.label} size="sm" style={{ width: 320 }}>
-                                        <Form.Control
-                                          size="sm"
-                                          placeholder={`Custom ${sl.label} URL`}
-                                          value={editingGroupLink.url}
-                                          onChange={(e) => setEditingGroupLink({ ...editingGroupLink, url: e.target.value })}
-                                          onKeyDown={(e) => {
-                                            if (e.key === 'Enter') {
-                                              const url = editingGroupLink.url.trim();
-                                              const next = { ...customGroupLinks };
-                                              if (url) {
-                                                next[group.key] = { ...groupCustomLinks, [linkId]: url };
-                                              } else {
-                                                const { [linkId]: _, ...rest } = groupCustomLinks;
-                                                if (Object.keys(rest).length > 0) {
-                                                  next[group.key] = rest;
-                                                } else {
-                                                  delete next[group.key];
-                                                }
-                                              }
-                                              onCustomGroupLinksChange(next);
-                                              setEditingGroupLink(null);
-                                            } else if (e.key === 'Escape') {
-                                              setEditingGroupLink(null);
-                                            }
-                                          }}
-                                          autoFocus
-                                        />
-                                        <Button
-                                          variant="outline-success"
-                                          size="sm"
-                                          title="Save"
-                                          onClick={() => {
-                                            const url = editingGroupLink.url.trim();
-                                            const next = { ...customGroupLinks };
-                                            if (url) {
-                                              next[group.key] = { ...groupCustomLinks, [linkId]: url };
-                                            } else {
-                                              const { [linkId]: _, ...rest } = groupCustomLinks;
-                                              if (Object.keys(rest).length > 0) {
-                                                next[group.key] = rest;
-                                              } else {
-                                                delete next[group.key];
-                                              }
-                                            }
-                                            onCustomGroupLinksChange(next);
-                                            setEditingGroupLink(null);
-                                          }}
-                                        >
-                                          <FaSave size={10} />
-                                        </Button>
-                                        <Button variant="outline-secondary" size="sm" title="Cancel" onClick={() => setEditingGroupLink(null)}>
-                                          <FaTimes size={10} />
-                                        </Button>
-                                      </InputGroup>
-                                    );
-                                  }
-
-                                  return (
-                                    <div key={sl.label} className="btn-group btn-group-sm">
-                                      <a href={customUrl || sl.url} target="_blank" rel="noreferrer" className="btn btn-outline-warning d-inline-flex align-items-center gap-1" title={customUrl ? 'Custom link' : 'Auto-generated link'}>
-                                        <FaSearch size={10} /> {sl.label}{customUrl ? '' : ' (auto)'}
-                                      </a>
-                                      <button
-                                        type="button"
-                                        className="btn btn-outline-warning"
-                                        title="Edit link"
-                                        onClick={() => setEditingGroupLink({ groupKey: group.key, linkId, url: customUrl || sl.url })}
-                                      >
-                                        <FaEdit size={10} />
-                                      </button>
-                                    </div>
-                                  );
-                                })}
-                                <Button size="sm" variant="outline-secondary" onClick={() => prefillDraftFromGroup(group.startDate, group.endDate)}>
-                                  <FaPlus className="me-1" /> Add another
-                                </Button>
-                                <Button size="sm" variant="outline-danger" onClick={() => setPendingClearGroup(group)} title="Clear this group">
-                                  <FaTrash size={11} />
-                                </Button>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                        {group.accommodations.map(renderAccRow)}
-                      </React.Fragment>
-                    );
-                  })}
-                </>
-              ) : (
-                displayedAccommodations.map(renderAccRow)
-              )}
-
-              {displayedAccommodations.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="text-center py-5">
-                    <div className="empty-inline-state">
-                      {accommodations.length === 0
-                        ? 'No stays yet. Use the quick-add form above to add your first accommodation, or paste a booking URL to autofill.'
-                        : 'No matching stays. Adjust filters or add a new option.'}
+        {/* Grouped view */}
+        {groupByDate ? (
+          accGroups.length > 0 ? (
+            accGroups.map((group) => {
+              const nights = group.startDate && group.endDate ? nightsBetween(group.startDate, group.endDate) : 0;
+              return (
+                <div className="group" key={group.key}>
+                  <div className="group-head">
+                    <div className="dates">
+                      {group.startDate && group.endDate
+                        ? fmtDateRange(group.startDate, group.endDate)
+                        : group.label}
                     </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </Table>
-        </Card.Body>
-      </Card>
+                    {nights > 0 && (
+                      <>
+                        <span className="dot-sep" />
+                        <span className="nights">{nights} night{nights !== 1 ? 's' : ''}</span>
+                      </>
+                    )}
+                    <span className="dot-sep" />
+                    <span className="nights">{group.accommodations.length} stay{group.accommodations.length !== 1 ? 's' : ''}</span>
 
+                    <div className="group-actions">
+                      {renderGroupSearchLinks(group)}
+                      <button
+                        type="button"
+                        className="btn-icon"
+                        title="Clear this group"
+                        onClick={() => setPendingClearGroup(group)}
+                      >
+                        <FaTrash size={11} />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="group-body">
+                    {group.accommodations.map(renderStayCard)}
+                    {renderGroupQuickAdd(group.key, group.startDate, group.endDate)}
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            displayedAccommodations.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--ink-3)' }}>
+                {accommodations.length === 0
+                  ? 'No stays yet. Use the form above to add your first accommodation, or paste a booking URL to autofill.'
+                  : 'No matching stays. Adjust filters or add a new option.'}
+              </div>
+            )
+          )
+        ) : (
+          /* Flat (ungrouped) view */
+          displayedAccommodations.length > 0 ? (
+            <div className="group">
+              <div className="group-body">
+                {displayedAccommodations.map(renderStayCard)}
+              </div>
+            </div>
+          ) : (
+            <div style={{ textAlign: 'center', padding: '48px 20px', color: 'var(--ink-3)' }}>
+              {accommodations.length === 0
+                ? 'No stays yet. Use the form above to add your first accommodation, or paste a booking URL to autofill.'
+                : 'No matching stays. Adjust filters or add a new option.'}
+            </div>
+          )
+        )}
+      </div>
+
+      {/* Bulk import modal */}
       <Modal show={showBulkModal} onHide={() => setShowBulkModal(false)} size="lg" centered>
         <Modal.Header closeButton>
           <Modal.Title>Bulk Add Accommodations</Modal.Title>
@@ -981,7 +1186,7 @@ const AccommodationManager: React.FC<Props> = ({
         <Modal.Body>
           <Form.Label className="fw-semibold">Paste one accommodation per line</Form.Label>
           <Form.Text className="d-block mb-2 text-muted">
-            Format: `description, price, link, startDate, endDate`
+            Format: description, price, link, startDate, endDate
           </Form.Text>
           <Form.Control
             as="textarea"
@@ -1031,6 +1236,7 @@ const AccommodationManager: React.FC<Props> = ({
         </Modal.Footer>
       </Modal>
 
+      {/* Clear group confirmation modal */}
       <Modal show={pendingClearGroup !== null} onHide={() => setPendingClearGroup(null)} centered size="sm">
         <Modal.Body className="text-center py-4">
           <div className="mb-3">
@@ -1038,7 +1244,7 @@ const AccommodationManager: React.FC<Props> = ({
           </div>
           <h5 className="fw-semibold mb-2">Clear accommodation group?</h5>
           <p className="text-muted mb-0">
-            All <strong>{pendingClearGroup?.accommodations.length}</strong> accommodation{pendingClearGroup?.accommodations.length !== 1 ? 's' : ''} in <strong>{pendingClearGroup?.label}</strong> will be permanently removed.
+            All <strong>{pendingClearGroup?.accommodations.length}</strong> accommodation{pendingClearGroup?.accommodations.length !== 1 ? 's' : ''} in <strong>{pendingClearGroup?.startDate && pendingClearGroup?.endDate ? fmtDateRange(pendingClearGroup.startDate, pendingClearGroup.endDate) : pendingClearGroup?.label}</strong> will be permanently removed.
           </p>
         </Modal.Body>
         <Modal.Footer className="justify-content-center border-0 pt-0 pb-3 gap-2">

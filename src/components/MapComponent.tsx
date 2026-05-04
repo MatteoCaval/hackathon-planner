@@ -3,11 +3,10 @@ import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-
 import { DUBLIN_COORDS } from '../types';
 import L from 'leaflet';
 
-// Fix for default marker icon in leaflet with webpack/vite
 import icon from 'leaflet/dist/images/marker-icon.png';
 import iconShadow from 'leaflet/dist/images/marker-shadow.png';
 
-let DefaultIcon = L.icon({
+const DefaultIcon = L.icon({
     iconUrl: icon,
     shadowUrl: iconShadow,
     iconSize: [25, 41],
@@ -22,40 +21,42 @@ interface Props {
   destName: string;
 }
 
-// Component to update map view when props change
-function ChangeView({ center }: { center: [number, number] }) {
+function ChangeView({ center, bounds }: { center: [number, number]; bounds: [number, number][] }) {
   const map = useMap();
-  map.setView(center, 4);
+  React.useEffect(() => {
+    map.fitBounds(bounds as L.LatLngBoundsExpression, { padding: [30, 30] });
+  }, [map, center[0], center[1]]);
   return null;
 }
 
 const MapComponent: React.FC<Props> = ({ destLat, destLng, destName }) => {
   const destCoords: [number, number] = [destLat, destLng];
-  const route = [DUBLIN_COORDS, destCoords];
+  const bounds: [number, number][] = [DUBLIN_COORDS, destCoords];
 
   return (
-    <div className="map-shell" role="region" aria-label={`Map route from Dublin to ${destName}`}>
-      <MapContainer center={destCoords} zoom={4} style={{ height: '100%', width: '100%' }}>
-        <ChangeView center={destCoords} />
-        <TileLayer
-          url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-        />
-        
-        {/* Dublin Marker */}
-        <Marker position={DUBLIN_COORDS}>
-          <Popup>Dublin (Office)</Popup>
-        </Marker>
-
-        {/* Destination Marker */}
-        <Marker position={destCoords}>
-          <Popup>{destName}</Popup>
-        </Marker>
-
-        {/* Route Line */}
-        <Polyline positions={route as any} color="#2b687b" weight={4} opacity={0.75} />
-      </MapContainer>
-    </div>
+    <MapContainer
+      center={destCoords}
+      zoom={4}
+      style={{ height: '100%', width: '100%' }}
+      zoomControl={false}
+      scrollWheelZoom={false}
+      attributionControl={false}
+    >
+      <ChangeView center={destCoords} bounds={bounds} />
+      <TileLayer
+        url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
+      />
+      <Marker position={DUBLIN_COORDS}>
+        <Popup>Dublin</Popup>
+      </Marker>
+      <Marker position={destCoords}>
+        <Popup>{destName}</Popup>
+      </Marker>
+      <Polyline
+        positions={[DUBLIN_COORDS, destCoords]}
+        pathOptions={{ color: 'var(--accent, #3a6b8c)', weight: 2, opacity: 0.6, dashArray: '6 4' }}
+      />
+    </MapContainer>
   );
 };
 

@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react';
-import { Table, Button, Form, Card, Modal, InputGroup, Row, Col, Badge } from 'react-bootstrap';
+import { Form, Modal, Table, InputGroup, Button } from 'react-bootstrap';
 import { v4 as uuidv4 } from 'uuid';
 import { Flight, SearchLinkTemplate } from '../types';
 import {
@@ -12,10 +12,8 @@ import {
   FaClone,
   FaClipboard,
   FaListUl,
-  FaFilter,
-  FaLayerGroup,
   FaSearch,
-  FaExclamationTriangle
+  FaExclamationTriangle,
 } from 'react-icons/fa';
 import { getUrlAutofill } from '../utils/urlAutofill';
 import DateRangePicker from './DateRangePicker';
@@ -23,6 +21,10 @@ import { formatCurrency } from '../utils/budget';
 import { getFlightSearchLinks } from '../utils/bookingLinks';
 import VoteButton from './VoteButton';
 import ClockTimePicker from './ClockTimePicker';
+
+/* ------------------------------------------------------------------ */
+/*  Props & types                                                      */
+/* ------------------------------------------------------------------ */
 
 interface Props {
   flights: Flight[];
@@ -56,6 +58,24 @@ interface ParsedBulkFlight {
 
 type SortBy = 'price' | 'description' | 'startDate' | 'dateAdded';
 
+/* ------------------------------------------------------------------ */
+/*  Helpers                                                            */
+/* ------------------------------------------------------------------ */
+
+const fmtDateRange = (start: string, end: string): string => {
+  if (!start || !end) return `${start || 'No start'} to ${end || 'No end'}`;
+  const da = new Date(start + 'T00:00');
+  const db = new Date(end + 'T00:00');
+  const sameMonth = da.getMonth() === db.getMonth() && da.getFullYear() === db.getFullYear();
+  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+  const aStr = da.toLocaleDateString('en-GB', opts);
+  const bStr = sameMonth ? String(db.getDate()) : db.toLocaleDateString('en-GB', opts);
+  return `${aStr} – ${bStr}`;
+};
+
+const nightsBetween = (a: string, b: string): number =>
+  Math.max(1, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000));
+
 const formatTimeAgo = (timestamp: number): string => {
   const seconds = Math.floor((Date.now() - timestamp) / 1000);
   if (seconds < 60) return 'just now';
@@ -75,7 +95,9 @@ const parseBulkFlights = (bulkInput: string): ParsedBulkFlight[] => {
     .map((line, index) => ({ line: line.trim(), lineNumber: index + 1 }))
     .filter(({ line }) => Boolean(line))
     .map(({ line, lineNumber }) => {
-      const [description = '', rawPrice = '', link = '', startDate = '', endDate = ''] = line.split(',').map((part) => part.trim());
+      const [description = '', rawPrice = '', link = '', startDate = '', endDate = ''] = line
+        .split(',')
+        .map((part) => part.trim());
       const pricePerPerson = Number(rawPrice);
 
       if (!link || !Number.isFinite(pricePerPerson) || pricePerPerson <= 0) {
@@ -90,17 +112,42 @@ const parseBulkFlights = (bulkInput: string): ParsedBulkFlight[] => {
         };
       }
 
-      return {
-        lineNumber,
-        description,
-        pricePerPerson,
-        link,
-        startDate,
-        endDate,
-        error: ''
-      };
+      return { lineNumber, description, pricePerPerson, link, startDate, endDate, error: '' };
     });
 };
+
+/** Best-effort short code from an origin string like "Dublin" -> "DUB" */
+const toIata = (raw: string): string => {
+  const trimmed = raw.trim();
+  if (!trimmed) return '???';
+  // Already looks like a 3-letter code
+  if (/^[A-Z]{3}$/i.test(trimmed)) return trimmed.toUpperCase();
+  // Common cities -> codes
+  const map: Record<string, string> = {
+    dublin: 'DUB', london: 'LDN', paris: 'CDG', rome: 'FCO', berlin: 'BER',
+    amsterdam: 'AMS', barcelona: 'BCN', madrid: 'MAD', lisbon: 'LIS',
+    milan: 'MXP', vienna: 'VIE', prague: 'PRG', budapest: 'BUD',
+    athens: 'ATH', copenhagen: 'CPH', stockholm: 'ARN', oslo: 'OSL',
+    brussels: 'BRU', munich: 'MUC', frankfurt: 'FRA', zurich: 'ZRH',
+    warsaw: 'WAW', krakow: 'KRK', porto: 'OPO', nice: 'NCE',
+    edinburgh: 'EDI', manchester: 'MAN', birmingham: 'BHX',
+    malaga: 'AGP', alicante: 'ALC', faro: 'FAO', split: 'SPU',
+    dubrovnik: 'DBV', naples: 'NAP', palma: 'PMI', ibiza: 'IBZ',
+    tenerife: 'TFS', lanzarote: 'ACE', rhodes: 'RHO', corfu: 'CFU',
+    santorini: 'JTR', thessaloniki: 'SKG', lyon: 'LYS', bordeaux: 'BOD',
+    toulouse: 'TLS', marseille: 'MRS', bologna: 'BLQ', venice: 'VCE',
+    pisa: 'PSA', turin: 'TRN', gdansk: 'GDN', riga: 'RIX',
+    tallinn: 'TLL', vilnius: 'VNO', helsinki: 'HEL', reykjavik: 'KEF',
+  };
+  const lower = trimmed.toLowerCase();
+  if (map[lower]) return map[lower];
+  // Fallback: first 3 chars uppercased
+  return trimmed.slice(0, 3).toUpperCase();
+};
+
+/* ------------------------------------------------------------------ */
+/*  Component                                                          */
+/* ------------------------------------------------------------------ */
 
 const FlightManager: React.FC<Props> = ({
   flights,
@@ -117,62 +164,85 @@ const FlightManager: React.FC<Props> = ({
   const [editForm, setEditForm] = useState<Partial<Flight>>({});
   const [showBulkModal, setShowBulkModal] = useState(false);
   const [bulkInput, setBulkInput] = useState('');
-  const [attemptedAdd, setAttemptedAdd] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [maxPrice, setMaxPrice] = useState<string>('');
-  const [sortBy, setSortBy] = useState<SortBy>('price');
-  const [sortDirection, setSortDirection] = useState<'asc' | 'desc'>('asc');
-  const [groupByDate, setGroupByDate] = useState(true);
+  const [searchQuery] = useState('');
+  const [maxPrice] = useState<string>('');
+  const [sortBy] = useState<SortBy>('price');
+  const [sortDirection] = useState<'asc' | 'desc'>('asc');
   const [pendingClearGroup, setPendingClearGroup] = useState<FlightGroup | null>(null);
-
-  const quickAddDescriptionRef = React.useRef<HTMLInputElement>(null);
-  const quickAddPriceRef = React.useRef<HTMLInputElement>(null);
+  const [openQuickAddKeys, setOpenQuickAddKeys] = useState<Set<string>>(new Set());
+  const [groupDrafts, setGroupDrafts] = useState<Record<string, Partial<Flight>>>({});
+  const [groupAttemptedAdd, setGroupAttemptedAdd] = useState<Record<string, boolean>>({});
 
   const currentYear = new Date().getFullYear();
   const minDate = `${currentYear}-01-01`;
   const parsedBulkFlights = useMemo(() => parseBulkFlights(bulkInput), [bulkInput]);
   const validBulkFlights = parsedBulkFlights.filter((row) => !row.error);
 
-  const isDraftLinkValid = Boolean(draft.link);
-  const isDraftPriceValid = typeof draft.pricePerPerson === 'number' && draft.pricePerPerson > 0;
-  const isDraftValid = isDraftLinkValid && isDraftPriceValid;
+  /* ---- draft helpers (top-level add form uses props-based draft) ---- */
 
   const setDraftValue = (updates: Partial<Flight>) => {
     onDraftChange({ ...draft, ...updates });
   };
 
-  const handleAdd = (focusNext = false) => {
-    setAttemptedAdd(true);
-    if (!(draft.link && typeof draft.pricePerPerson === 'number' && draft.pricePerPerson > 0)) {
-      return;
+  const getGroupDraft = (groupKey: string): Partial<Flight> => groupDrafts[groupKey] || {};
+
+  const setGroupDraftValue = (groupKey: string, updates: Partial<Flight>) => {
+    setGroupDrafts((prev) => ({ ...prev, [groupKey]: { ...prev[groupKey], ...updates } }));
+  };
+
+  /* ---- CRUD ---- */
+
+  const addFlight = (source: Partial<Flight>, groupKey?: string) => {
+    if (!(source.link && typeof source.pricePerPerson === 'number' && source.pricePerPerson > 0)) {
+      return false;
     }
 
     const flight: Flight = {
       id: uuidv4(),
-      link: draft.link,
-      description: draft.description || '',
-      startDate: draft.startDate || '',
-      endDate: draft.endDate || '',
-      departureTime: draft.departureTime || '',
-      arrivalTime: draft.arrivalTime || '',
-      origin: draft.origin || 'Dublin',
-      pricePerPerson: Number(draft.pricePerPerson),
+      link: source.link,
+      description: source.description || '',
+      startDate: source.startDate || '',
+      endDate: source.endDate || '',
+      departureTime: source.departureTime || '',
+      arrivalTime: source.arrivalTime || '',
+      origin: source.origin || 'Dublin',
+      pricePerPerson: Number(source.pricePerPerson),
       createdAt: Date.now()
     };
 
     onChange([...flights, flight]);
-    onDraftChange({});
-    setAttemptedAdd(false);
 
+    if (groupKey) {
+      setGroupDrafts((prev) => {
+        const next = { ...prev };
+        delete next[groupKey];
+        return next;
+      });
+      setGroupAttemptedAdd((prev) => ({ ...prev, [groupKey]: false }));
+    } else {
+      onDraftChange({});
+    }
+
+    return true;
+  };
+
+  const handleAdd = (focusNext = false) => {
+    const ok = addFlight(draft);
+    if (!ok) return;
     if (focusNext) {
+      // Allow DOM to update before focusing
       setTimeout(() => {
-        quickAddDescriptionRef.current?.focus();
+        document.querySelector<HTMLInputElement>('.section-head .qa-grid input')?.focus();
       }, 0);
     }
   };
 
   const handleRemove = (id: string) => {
-    onChange(flights.filter((flight) => flight.id !== id));
+    onChange(flights.filter((f) => f.id !== id));
+    if (editingId === id) {
+      setEditingId(null);
+      setEditForm({});
+    }
   };
 
   const handleDuplicate = (flight: Flight) => {
@@ -198,62 +268,63 @@ const FlightManager: React.FC<Props> = ({
   };
 
   const saveEdit = () => {
-    if (!(editingId && editForm.link && editForm.pricePerPerson)) {
-      return;
-    }
+    if (!(editingId && editForm.link && editForm.pricePerPerson)) return;
 
-    const updatedFlights = flights.map((flight) => {
-      if (flight.id !== editingId) {
-        return flight;
-      }
-
-      return {
-        ...flight,
-        ...editForm,
-        pricePerPerson: Number(editForm.pricePerPerson),
-        updatedAt: Date.now()
-      } as Flight;
-    });
-
-    onChange(updatedFlights);
+    onChange(
+      flights.map((f) =>
+        f.id !== editingId
+          ? f
+          : ({ ...f, ...editForm, pricePerPerson: Number(editForm.pricePerPerson), updatedAt: Date.now() } as Flight)
+      )
+    );
     cancelEdit();
   };
 
-  const handleQuickAddKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== 'Enter') {
-      return;
-    }
-
+  const handleQuickAddKeyDown = (e: React.KeyboardEvent<HTMLElement>, groupKey?: string) => {
+    if (e.key !== 'Enter') return;
     e.preventDefault();
-    handleAdd(Boolean(e.metaKey || e.ctrlKey));
+    if (groupKey) {
+      const gDraft = getGroupDraft(groupKey);
+      if (!(gDraft.link && typeof gDraft.pricePerPerson === 'number' && gDraft.pricePerPerson > 0)) {
+        setGroupAttemptedAdd((prev) => ({ ...prev, [groupKey]: true }));
+        return;
+      }
+      addFlight(gDraft, groupKey);
+    } else {
+      handleAdd(Boolean(e.metaKey || e.ctrlKey));
+    }
   };
 
-  const handlePasteAutofill = async () => {
-    if (!navigator.clipboard?.readText) {
-      return;
-    }
-
+  const handlePasteAutofill = async (groupKey?: string) => {
+    if (!navigator.clipboard?.readText) return;
     const clipboardText = (await navigator.clipboard.readText()).trim();
     const autofill = getUrlAutofill(clipboardText);
-    if (!autofill) {
-      return;
-    }
+    if (!autofill) return;
 
-    setDraftValue({
-      link: autofill.link,
-      description: draft.description || `${autofill.providerName} Option`,
-      startDate: draft.startDate || autofill.startDate,
-      endDate: draft.endDate || autofill.endDate,
-      pricePerPerson: typeof draft.pricePerPerson === 'number' ? draft.pricePerPerson : autofill.amount
-    });
+    if (groupKey) {
+      const gd = getGroupDraft(groupKey);
+      setGroupDraftValue(groupKey, {
+        link: autofill.link,
+        description: gd.description || `${autofill.providerName} Option`,
+        startDate: gd.startDate || autofill.startDate,
+        endDate: gd.endDate || autofill.endDate,
+        pricePerPerson: typeof gd.pricePerPerson === 'number' ? gd.pricePerPerson : autofill.amount
+      });
+    } else {
+      setDraftValue({
+        link: autofill.link,
+        description: draft.description || `${autofill.providerName} Option`,
+        startDate: draft.startDate || autofill.startDate,
+        endDate: draft.endDate || autofill.endDate,
+        pricePerPerson: typeof draft.pricePerPerson === 'number' ? draft.pricePerPerson : autofill.amount
+      });
+    }
   };
 
   const handleBulkImport = () => {
-    if (validBulkFlights.length === 0) {
-      return;
-    }
+    if (validBulkFlights.length === 0) return;
 
-    const importedFlights = validBulkFlights.map((row) => ({
+    const imported = validBulkFlights.map((row) => ({
       id: uuidv4(),
       description: row.description,
       pricePerPerson: row.pricePerPerson,
@@ -266,453 +337,625 @@ const FlightManager: React.FC<Props> = ({
       createdAt: Date.now()
     }));
 
-    onChange([...flights, ...importedFlights]);
+    onChange([...flights, ...imported]);
     setBulkInput('');
     setShowBulkModal(false);
   };
+
+  /* ---- derived data ---- */
 
   const displayedFlights = useMemo(() => {
     const parsedMaxPrice = Number(maxPrice);
     const hasMaxPrice = Number.isFinite(parsedMaxPrice) && parsedMaxPrice > 0;
     const query = searchQuery.trim().toLowerCase();
 
-    const filteredFlights = flights.filter((flight) => {
-      const matchesQuery = query.length === 0
-        || flight.description.toLowerCase().includes(query)
-        || flight.link.toLowerCase().includes(query);
-      const matchesPrice = !hasMaxPrice || flight.pricePerPerson <= parsedMaxPrice;
+    const filtered = flights.filter((f) => {
+      const matchesQuery =
+        query.length === 0 || f.description.toLowerCase().includes(query) || f.link.toLowerCase().includes(query);
+      const matchesPrice = !hasMaxPrice || f.pricePerPerson <= parsedMaxPrice;
       return matchesQuery && matchesPrice;
     });
 
-    return filteredFlights.sort((a, b) => {
-      const direction = sortDirection === 'asc' ? 1 : -1;
-
-      if (sortBy === 'price') {
-        return (a.pricePerPerson - b.pricePerPerson) * direction;
-      }
-
+    return filtered.sort((a, b) => {
+      const dir = sortDirection === 'asc' ? 1 : -1;
+      if (sortBy === 'price') return (a.pricePerPerson - b.pricePerPerson) * dir;
       if (sortBy === 'startDate') {
-        const aDate = a.startDate || '9999-12-31';
-        const bDate = b.startDate || '9999-12-31';
-        return aDate.localeCompare(bDate) * direction;
+        return (a.startDate || '9999-12-31').localeCompare(b.startDate || '9999-12-31') * dir;
       }
-
-      if (sortBy === 'dateAdded') {
-        const aTime = a.createdAt ?? 0;
-        const bTime = b.createdAt ?? 0;
-        return (aTime - bTime) * direction;
-      }
-
-      return (a.description || '').localeCompare(b.description || '') * direction;
+      if (sortBy === 'dateAdded') return ((a.createdAt ?? 0) - (b.createdAt ?? 0)) * dir;
+      return (a.description || '').localeCompare(b.description || '') * dir;
     });
   }, [flights, maxPrice, searchQuery, sortBy, sortDirection]);
 
   const flightGroups = useMemo((): FlightGroup[] => {
-    if (!groupByDate) return [];
     const groupMap = new Map<string, Flight[]>();
-    for (const flight of displayedFlights) {
-      const key = `${flight.startDate || 'no-start'}|${flight.endDate || 'no-end'}`;
+    for (const f of displayedFlights) {
+      const key = `${f.startDate || 'no-start'}|${f.endDate || 'no-end'}`;
       const existing = groupMap.get(key);
-      if (existing) {
-        existing.push(flight);
-      } else {
-        groupMap.set(key, [flight]);
-      }
+      if (existing) existing.push(f);
+      else groupMap.set(key, [f]);
     }
     return Array.from(groupMap.entries()).map(([key, groupFlights]) => {
       const first = groupFlights[0];
-      const start = first.startDate || 'No start date';
-      const end = first.endDate || 'No end date';
       return {
         key,
-        label: `${start} to ${end}`,
+        label: fmtDateRange(first.startDate, first.endDate),
         startDate: first.startDate,
         endDate: first.endDate,
         flights: groupFlights
       };
     });
-  }, [displayedFlights, groupByDate]);
+  }, [displayedFlights]);
 
-  const prefillDraftFromGroup = (startDate: string, endDate: string) => {
-    onDraftChange({ ...draft, startDate, endDate });
-    setTimeout(() => {
-      quickAddDescriptionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-      quickAddDescriptionRef.current?.focus();
-    }, 50);
+  /* ---- quick-add toggle per group ---- */
+
+  const toggleQuickAdd = (groupKey: string) => {
+    setOpenQuickAddKeys((prev) => {
+      const next = new Set(prev);
+      if (next.has(groupKey)) {
+        next.delete(groupKey);
+        // Clear draft for this group
+        setGroupDrafts((d) => {
+          const nd = { ...d };
+          delete nd[groupKey];
+          return nd;
+        });
+        setGroupAttemptedAdd((d) => ({ ...d, [groupKey]: false }));
+      } else {
+        next.add(groupKey);
+        // Prefill dates from the group
+        const group = flightGroups.find((g) => g.key === groupKey);
+        if (group) {
+          setGroupDrafts((d) => ({
+            ...d,
+            [groupKey]: { startDate: group.startDate, endDate: group.endDate }
+          }));
+        }
+      }
+      return next;
+    });
   };
+
+  const destIata = toIata(destinationName);
+
+  /* ---- render helpers ---- */
+
+  const renderEditForm = (flight: Flight) => (
+    <div className="flight-card" key={flight.id}>
+      <div className="qa-grid">
+        <Form.Group>
+          <Form.Label className="small text-muted mb-1">Description</Form.Label>
+          <Form.Control
+            size="sm"
+            value={editForm.description || ''}
+            onChange={(e) => setEditForm({ ...editForm, description: e.target.value })}
+          />
+        </Form.Group>
+        <Form.Group>
+          <Form.Label className="small text-muted mb-1">Origin</Form.Label>
+          <Form.Control
+            size="sm"
+            placeholder="Dublin"
+            value={editForm.origin || ''}
+            onChange={(e) => setEditForm({ ...editForm, origin: e.target.value })}
+          />
+        </Form.Group>
+        <DateRangePicker
+          startDate={editForm.startDate || ''}
+          endDate={editForm.endDate || ''}
+          minDate={minDate}
+          onChange={(s, e) => setEditForm({ ...editForm, startDate: s, endDate: e })}
+        />
+        <ClockTimePicker
+          label="Departs at"
+          value={editForm.departureTime || ''}
+          onChange={(t) => setEditForm({ ...editForm, departureTime: t })}
+        />
+        <ClockTimePicker
+          label="Arrives at"
+          value={editForm.arrivalTime || ''}
+          onChange={(t) => setEditForm({ ...editForm, arrivalTime: t })}
+        />
+        <Form.Group>
+          <Form.Label className="small text-muted mb-1">Link</Form.Label>
+          <InputGroup size="sm">
+            <Form.Control
+              placeholder="https://..."
+              value={editForm.link || ''}
+              onChange={(e) => setEditForm({ ...editForm, link: e.target.value })}
+            />
+            {editForm.link && (
+              <a
+                href={editForm.link}
+                target="_blank"
+                rel="noreferrer"
+                className="btn btn-outline-secondary btn-sm"
+                title="Open link"
+              >
+                <FaExternalLinkAlt size={11} />
+              </a>
+            )}
+          </InputGroup>
+        </Form.Group>
+        <Form.Group>
+          <Form.Label className="small text-muted mb-1">Price / Person</Form.Label>
+          <Form.Control
+            size="sm"
+            type="number"
+            step="10"
+            min="0"
+            value={editForm.pricePerPerson ?? ''}
+            onChange={(e) =>
+              setEditForm({ ...editForm, pricePerPerson: e.target.value === '' ? undefined : Number(e.target.value) })
+            }
+          />
+        </Form.Group>
+      </div>
+      <div className="qa-actions">
+        <button type="button" className="btn btn-sm btn-accent" onClick={saveEdit}>
+          <FaSave size={11} /> Save
+        </button>
+        <button type="button" className="btn btn-sm btn-ghost" onClick={cancelEdit}>
+          Cancel
+        </button>
+      </div>
+    </div>
+  );
+
+  const renderFlightCard = (flight: Flight) => {
+    if (editingId === flight.id) return renderEditForm(flight);
+
+    const fromCode = toIata(flight.origin || 'Dublin');
+    const toCode = destIata;
+    const voters = votes[flight.id] || [];
+
+    return (
+      <div className={`flight-card${currentPerson && voters.includes(currentPerson) ? ' is-voted' : ''}`} key={flight.id}>
+        {/* Route */}
+        <div className="flight-route">
+          <span className="iata">{fromCode}</span>
+          <span className="arrow">
+            <span className="plane">✈</span>
+          </span>
+          <span className="iata">{toCode}</span>
+        </div>
+
+        {/* Times */}
+        {(flight.departureTime || flight.arrivalTime) && (
+          <div className="flight-times">
+            <div className="time">
+              <span className="label">Depart</span>
+              {flight.departureTime || '—'}
+            </div>
+            <div className="time right">
+              <span className="label">Arrive</span>
+              {flight.arrivalTime || '—'}
+            </div>
+          </div>
+        )}
+
+        {/* Description */}
+        <div className="flight-desc">
+          {flight.description || 'Flight Option'}
+          {flight.createdAt && (
+            <span className="subtle-text" style={{ marginLeft: 8, fontSize: '0.75rem' }} title={new Date(flight.createdAt).toLocaleString()}>
+              {formatTimeAgo(flight.createdAt)}
+            </span>
+          )}
+          {flight.updatedAt && (
+            <span className="subtle-text" style={{ marginLeft: 8, fontSize: '0.75rem' }} title={new Date(flight.updatedAt).toLocaleString()}>
+              edited {formatTimeAgo(flight.updatedAt)}
+            </span>
+          )}
+        </div>
+
+        {/* Bottom bar */}
+        <div className="flight-bottom">
+          <div className="flight-price">
+            <span className="amount">{formatCurrency(flight.pricePerPerson)}</span>
+            <span className="per">per person</span>
+          </div>
+          <div className="flight-bottom-right">
+            <div className="card-actions">
+              {flight.link && (
+                <a
+                  href={flight.link}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn-icon btn-xs btn-ghost"
+                  title="Open booking link"
+                >
+                  <FaExternalLinkAlt size={11} />
+                </a>
+              )}
+              <button
+                type="button"
+                className="btn btn-icon btn-xs btn-ghost"
+                onClick={() => startEdit(flight)}
+                title="Edit"
+              >
+                <FaEdit size={11} />
+              </button>
+              <button
+                type="button"
+                className="btn btn-icon btn-xs btn-ghost"
+                onClick={() => handleDuplicate(flight)}
+                title="Duplicate"
+              >
+                <FaClone size={11} />
+              </button>
+              <button
+                type="button"
+                className="btn btn-icon btn-xs btn-ghost"
+                onClick={() => handleRemove(flight.id)}
+                title="Delete"
+                style={{ color: 'var(--danger)' }}
+              >
+                <FaTrash size={11} />
+              </button>
+            </div>
+            <VoteButton voters={voters} currentPerson={currentPerson} onToggle={() => onToggleVote(flight.id)} />
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const renderInlineQuickAdd = (groupKey: string) => {
+    const isOpen = openQuickAddKeys.has(groupKey);
+    const gd = getGroupDraft(groupKey);
+    const attempted = groupAttemptedAdd[groupKey] || false;
+    const gdLinkValid = Boolean(gd.link);
+    const gdPriceValid = typeof gd.pricePerPerson === 'number' && gd.pricePerPerson > 0;
+
+    return (
+      <div
+        className={`quick-add${isOpen ? ' is-open' : ''}`}
+        onClick={() => !isOpen && toggleQuickAdd(groupKey)}
+        role={isOpen ? undefined : 'button'}
+        tabIndex={isOpen ? undefined : 0}
+        onKeyDown={(e) => {
+          if (!isOpen && (e.key === 'Enter' || e.key === ' ')) toggleQuickAdd(groupKey);
+        }}
+      >
+        {!isOpen ? (
+          <span className="qa-hint">
+            <FaPlus size={11} /> Add a flight
+          </span>
+        ) : (
+          <>
+            <div className="qa-grid">
+              <Form.Group>
+                <Form.Label className="small text-muted mb-1">Description</Form.Label>
+                <Form.Control
+                  size="sm"
+                  placeholder="Ryanair Morning"
+                  value={gd.description || ''}
+                  onChange={(e) => setGroupDraftValue(groupKey, { description: e.target.value })}
+                  onKeyDown={(e) => handleQuickAddKeyDown(e, groupKey)}
+                  autoFocus
+                />
+              </Form.Group>
+              <Form.Group>
+                <Form.Label className="small text-muted mb-1">Origin</Form.Label>
+                <Form.Control
+                  size="sm"
+                  placeholder="Dublin"
+                  value={gd.origin || ''}
+                  onChange={(e) => setGroupDraftValue(groupKey, { origin: e.target.value })}
+                  onKeyDown={(e) => handleQuickAddKeyDown(e, groupKey)}
+                />
+              </Form.Group>
+              <DateRangePicker
+                startDate={gd.startDate || ''}
+                endDate={gd.endDate || ''}
+                minDate={minDate}
+                onChange={(s, e) => setGroupDraftValue(groupKey, { startDate: s, endDate: e })}
+              />
+              <ClockTimePicker
+                label="Departs at"
+                value={gd.departureTime || ''}
+                onChange={(t) => setGroupDraftValue(groupKey, { departureTime: t })}
+              />
+              <ClockTimePicker
+                label="Arrives at"
+                value={gd.arrivalTime || ''}
+                onChange={(t) => setGroupDraftValue(groupKey, { arrivalTime: t })}
+              />
+              <Form.Group>
+                <Form.Label className="small text-muted mb-1">Link</Form.Label>
+                <InputGroup size="sm">
+                  <Form.Control
+                    placeholder="https://..."
+                    value={gd.link || ''}
+                    isInvalid={attempted && !gdLinkValid}
+                    onChange={(e) => setGroupDraftValue(groupKey, { link: e.target.value })}
+                    onKeyDown={(e) => handleQuickAddKeyDown(e, groupKey)}
+                  />
+                  <Button variant="outline-secondary" size="sm" onClick={() => handlePasteAutofill(groupKey)} title="Paste URL and autofill">
+                    <FaClipboard />
+                  </Button>
+                </InputGroup>
+              </Form.Group>
+              <Form.Group>
+                <Form.Label className="small text-muted mb-1">Price / Person</Form.Label>
+                <Form.Control
+                  size="sm"
+                  type="number"
+                  inputMode="numeric"
+                  step="10"
+                  min="0"
+                  placeholder="0"
+                  value={gd.pricePerPerson ?? ''}
+                  isInvalid={attempted && !gdPriceValid}
+                  onChange={(e) =>
+                    setGroupDraftValue(groupKey, {
+                      pricePerPerson: e.target.value === '' ? undefined : Number(e.target.value)
+                    })
+                  }
+                  onKeyDown={(e) => handleQuickAddKeyDown(e, groupKey)}
+                />
+              </Form.Group>
+            </div>
+            {attempted && (!gdLinkValid || !gdPriceValid) && (
+              <div className="inline-status error" role="status">
+                Link and price per person are required.
+              </div>
+            )}
+            <div className="qa-actions">
+              <button
+                type="button"
+                className="btn btn-sm btn-accent"
+                onClick={() => {
+                  if (!(gd.link && typeof gd.pricePerPerson === 'number' && gd.pricePerPerson > 0)) {
+                    setGroupAttemptedAdd((prev) => ({ ...prev, [groupKey]: true }));
+                    return;
+                  }
+                  addFlight(gd, groupKey);
+                  toggleQuickAdd(groupKey);
+                }}
+              >
+                <FaPlus size={11} /> Add
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                onClick={() => toggleQuickAdd(groupKey)}
+              >
+                Cancel
+              </button>
+            </div>
+          </>
+        )}
+      </div>
+    );
+  };
+
+  const renderGroup = (group: FlightGroup) => {
+    const groupSearchLinks = getFlightSearchLinks(
+      searchLinks,
+      group.flights[0]?.origin || '',
+      destinationName,
+      group.startDate,
+      group.endDate
+    );
+
+    const nights =
+      group.startDate && group.endDate ? nightsBetween(group.startDate, group.endDate) : null;
+
+    return (
+      <div className="group" key={group.key}>
+        <div className="group-head">
+          <div className="dates">
+            <span>{group.label}</span>
+            {nights !== null && (
+              <>
+                <span className="dot-sep" />
+                <span className="nights">
+                  {nights} night{nights !== 1 ? 's' : ''}
+                </span>
+              </>
+            )}
+            <span className="dot-sep" />
+            <span className="nights">{group.flights.length} flight{group.flights.length !== 1 ? 's' : ''}</span>
+          </div>
+          <div className="group-actions">
+            <div className="search-links">
+              {groupSearchLinks.map((sl) => (
+                <a
+                  key={sl.label}
+                  href={sl.url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="link-chip"
+                  title="Link may not pre-fill correctly — work in progress"
+                >
+                  <FaSearch size={10} /> {sl.label}
+                </a>
+              ))}
+            </div>
+            <button
+              type="button"
+              className="btn btn-xs btn-ghost"
+              onClick={() => toggleQuickAdd(group.key)}
+              title="Add another flight to this group"
+            >
+              <FaPlus size={10} /> Add
+            </button>
+            <button
+              type="button"
+              className="btn btn-xs btn-ghost"
+              onClick={() => setPendingClearGroup(group)}
+              title="Clear this group"
+              style={{ color: 'var(--danger)' }}
+            >
+              <FaTrash size={10} />
+            </button>
+          </div>
+        </div>
+
+        <div className="group-body">
+          {group.flights.map(renderFlightCard)}
+          {renderInlineQuickAdd(group.key)}
+        </div>
+      </div>
+    );
+  };
+
+  /* ---- top-level add form ---- */
+
+  const isDraftLinkValid = Boolean(draft.link);
+  const isDraftPriceValid = typeof draft.pricePerPerson === 'number' && draft.pricePerPerson > 0;
+  const isDraftValid = isDraftLinkValid && isDraftPriceValid;
+  const [attemptedAdd, setAttemptedAdd] = useState(false);
+
+  const handleTopAdd = (focusNext = false) => {
+    setAttemptedAdd(true);
+    if (!isDraftValid) return;
+    handleAdd(focusNext);
+    setAttemptedAdd(false);
+  };
+
+  const handleTopKeyDown = (e: React.KeyboardEvent<HTMLElement>) => {
+    if (e.key !== 'Enter') return;
+    e.preventDefault();
+    handleTopAdd(Boolean(e.metaKey || e.ctrlKey));
+  };
+
+  /* ================================================================ */
+  /*  RENDER                                                           */
+  /* ================================================================ */
 
   return (
     <>
-      <Card className="workspace-card manager-card">
-        <Card.Header className="workspace-card-header">
-          <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
-            <div className="d-flex align-items-center gap-2">
-              <FaPlaneDeparture className="text-primary" aria-hidden="true" />
-              <h2 className="workspace-card-title m-0">Flight Options</h2>
-              <Badge bg="light" text="dark">{flights.length}</Badge>
-            </div>
-            <Button size="sm" variant="outline-secondary" onClick={() => setShowBulkModal(true)}>
-              <FaListUl className="me-1" /> Bulk Add
-            </Button>
+      <div className="section">
+        {/* Section header */}
+        <div className="section-head">
+          <div className="section-title">
+            <FaPlaneDeparture aria-hidden="true" />
+            <h2>Flight Options</h2>
+            <span className="section-sub">{flights.length}</span>
           </div>
-
-          <div className="subtle-text mb-2">Quick add (Enter to save, Cmd/Ctrl + Enter to save and keep typing).</div>
-          <div className="manager-quick-add-grid">
-            <Form.Group>
-              <Form.Label className="small text-muted mb-1">Description</Form.Label>
-              <Form.Control
-                ref={quickAddDescriptionRef}
-                size="sm"
-                placeholder="Ryanair Morning"
-                value={draft.description || ''}
-                onChange={(e) => setDraftValue({ description: e.target.value })}
-                onKeyDown={handleQuickAddKeyDown}
-                aria-label="Flight description"
-              />
-            </Form.Group>
-
-            <DateRangePicker
-              startDate={draft.startDate || ''}
-              endDate={draft.endDate || ''}
-              minDate={minDate}
-              onChange={(start, end) => setDraftValue({ startDate: start, endDate: end })}
-            />
-
-            <Form.Group>
-              <Form.Label className="small text-muted mb-1">Origin</Form.Label>
-              <Form.Control
-                size="sm"
-                placeholder="Dublin"
-                value={draft.origin || ''}
-                onChange={(e) => setDraftValue({ origin: e.target.value })}
-                onKeyDown={handleQuickAddKeyDown}
-                aria-label="Flight origin"
-              />
-            </Form.Group>
-
-            <ClockTimePicker
-              label="Arrives at"
-              value={draft.arrivalTime || ''}
-              onChange={(t) => setDraftValue({ arrivalTime: t })}
-            />
-
-            <ClockTimePicker
-              label="Departs at"
-              value={draft.departureTime || ''}
-              onChange={(t) => setDraftValue({ departureTime: t })}
-            />
-
-            <Form.Group>
-              <Form.Label className="small text-muted mb-1">Link</Form.Label>
-              <InputGroup size="sm">
-                <Form.Control
-                  placeholder="https://..."
-                  value={draft.link || ''}
-                  isInvalid={attemptedAdd && !isDraftLinkValid}
-                  onChange={(e) => setDraftValue({ link: e.target.value })}
-                  onKeyDown={handleQuickAddKeyDown}
-                  aria-label="Flight booking link"
-                />
-                <Button variant="outline-secondary" onClick={handlePasteAutofill} title="Paste URL and autofill fields">
-                  <FaClipboard />
-                </Button>
-              </InputGroup>
-            </Form.Group>
-
-            <Form.Group>
-              <Form.Label className="small text-muted mb-1">Price / Person</Form.Label>
-              <Form.Control
-                ref={quickAddPriceRef}
-                size="sm"
-                type="number"
-                inputMode="numeric"
-                step="10"
-                min="0"
-                placeholder="0"
-                value={draft.pricePerPerson ?? ''}
-                isInvalid={attemptedAdd && !isDraftPriceValid}
-                onChange={(e) => setDraftValue({ pricePerPerson: e.target.value === '' ? undefined : Number(e.target.value) })}
-                onKeyDown={handleQuickAddKeyDown}
-                aria-label="Flight price per person"
-              />
-            </Form.Group>
+          <div className="section-actions">
+            <button type="button" className="btn btn-sm btn-outline" onClick={() => setShowBulkModal(true)}>
+              <FaListUl size={11} /> Bulk Add
+            </button>
           </div>
+        </div>
 
-          {(attemptedAdd && (!isDraftLinkValid || !isDraftPriceValid)) && (
-            <div className="inline-status error" role="status">Link and price per person are required.</div>
-          )}
-
-          <div className="d-flex justify-content-end mt-3">
-            <Button size="sm" variant="primary" onClick={() => handleAdd(false)} disabled={!isDraftValid}>
-              <FaPlus className="me-1" /> Add Flight
-            </Button>
+        {/* Top-level quick-add form */}
+        <div className="group" style={{ marginBottom: '16px' }}>
+          <div className="group-head">
+            <div className="dates">New flight</div>
           </div>
-        </Card.Header>
-
-        <Card.Body className="p-0">
-          <div className="manager-controls">
-            <Row className="g-2 align-items-end">
-              <Col md={5}>
-                <Form.Label className="small text-muted mb-1">Search</Form.Label>
-                <Form.Control
-                  size="sm"
-                  placeholder="Filter by description or link"
-                  value={searchQuery}
-                  onChange={(event) => setSearchQuery(event.target.value)}
-                  aria-label="Search flight options"
-                />
-              </Col>
-              <Col md={3}>
-                <Form.Label className="small text-muted mb-1">Max price</Form.Label>
-                <InputGroup size="sm">
-                  <InputGroup.Text><FaFilter /></InputGroup.Text>
+          <div className="group-body">
+            <div className="quick-add is-open" style={{ border: 'none' }}>
+              <div className="qa-grid">
+                <Form.Group>
+                  <Form.Label className="small text-muted mb-1">Description</Form.Label>
                   <Form.Control
-                    type="number"
-                    min="0"
-                    step="10"
-                    value={maxPrice}
-                    onChange={(event) => setMaxPrice(event.target.value)}
-                    aria-label="Filter by max flight price"
+                    size="sm"
+                    placeholder="Ryanair Morning"
+                    value={draft.description || ''}
+                    onChange={(e) => setDraftValue({ description: e.target.value })}
+                    onKeyDown={handleTopKeyDown}
                   />
-                </InputGroup>
-              </Col>
-              <Col md={2}>
-                <Form.Label className="small text-muted mb-1">Sort by</Form.Label>
-                <Form.Select size="sm" value={sortBy} onChange={(event) => setSortBy(event.target.value as SortBy)} aria-label="Sort flights by">
-                  <option value="price">Price</option>
-                  <option value="description">Name</option>
-                  <option value="startDate">Start date</option>
-                  <option value="dateAdded">Date added</option>
-                </Form.Select>
-              </Col>
-              <Col md={2}>
-                <Form.Label className="small text-muted mb-1">Direction</Form.Label>
-                <Form.Select size="sm" value={sortDirection} onChange={(event) => setSortDirection(event.target.value as 'asc' | 'desc')} aria-label="Sort order">
-                  <option value="asc">Asc</option>
-                  <option value="desc">Desc</option>
-                </Form.Select>
-              </Col>
-            </Row>
-            <div className="mt-2">
-              <Button
-                size="sm"
-                variant={groupByDate ? 'primary' : 'outline-secondary'}
-                onClick={() => setGroupByDate(!groupByDate)}
-                className="d-inline-flex align-items-center gap-1"
-              >
-                <FaLayerGroup /> Group by dates
-              </Button>
+                </Form.Group>
+                <Form.Group>
+                  <Form.Label className="small text-muted mb-1">Origin</Form.Label>
+                  <Form.Control
+                    size="sm"
+                    placeholder="Dublin"
+                    value={draft.origin || ''}
+                    onChange={(e) => setDraftValue({ origin: e.target.value })}
+                    onKeyDown={handleTopKeyDown}
+                  />
+                </Form.Group>
+                <DateRangePicker
+                  startDate={draft.startDate || ''}
+                  endDate={draft.endDate || ''}
+                  minDate={minDate}
+                  onChange={(s, e) => setDraftValue({ startDate: s, endDate: e })}
+                />
+                <ClockTimePicker
+                  label="Departs at"
+                  value={draft.departureTime || ''}
+                  onChange={(t) => setDraftValue({ departureTime: t })}
+                />
+                <ClockTimePicker
+                  label="Arrives at"
+                  value={draft.arrivalTime || ''}
+                  onChange={(t) => setDraftValue({ arrivalTime: t })}
+                />
+                <Form.Group>
+                  <Form.Label className="small text-muted mb-1">Link</Form.Label>
+                  <InputGroup size="sm">
+                    <Form.Control
+                      placeholder="https://..."
+                      value={draft.link || ''}
+                      isInvalid={attemptedAdd && !isDraftLinkValid}
+                      onChange={(e) => setDraftValue({ link: e.target.value })}
+                      onKeyDown={handleTopKeyDown}
+                    />
+                    <Button variant="outline-secondary" size="sm" onClick={() => handlePasteAutofill()} title="Paste URL and autofill fields">
+                      <FaClipboard />
+                    </Button>
+                  </InputGroup>
+                </Form.Group>
+                <Form.Group>
+                  <Form.Label className="small text-muted mb-1">Price / Person</Form.Label>
+                  <Form.Control
+                    size="sm"
+                    type="number"
+                    inputMode="numeric"
+                    step="10"
+                    min="0"
+                    placeholder="0"
+                    value={draft.pricePerPerson ?? ''}
+                    isInvalid={attemptedAdd && !isDraftPriceValid}
+                    onChange={(e) =>
+                      setDraftValue({ pricePerPerson: e.target.value === '' ? undefined : Number(e.target.value) })
+                    }
+                    onKeyDown={handleTopKeyDown}
+                  />
+                </Form.Group>
+              </div>
+              {attemptedAdd && (!isDraftLinkValid || !isDraftPriceValid) && (
+                <div className="inline-status error" role="status">
+                  Link and price per person are required.
+                </div>
+              )}
+              <div className="qa-actions">
+                <button
+                  type="button"
+                  className="btn btn-sm btn-accent"
+                  onClick={() => handleTopAdd(false)}
+                  disabled={!isDraftValid && !attemptedAdd}
+                >
+                  <FaPlus size={11} /> Add Flight
+                </button>
+              </div>
             </div>
           </div>
+        </div>
 
-          <Table hover responsive className="mb-0 align-middle manager-table">
-            <thead>
-              <tr>
-                <th style={{ width: '52%' }}>Option</th>
-                <th style={{ width: '18%' }}>Price</th>
-                <th style={{ width: '30%' }} />
-              </tr>
-            </thead>
-            <tbody>
-              {groupByDate ? (
-                <>
-                  {flightGroups.map((group) => {
-                    const groupSearchLinks = getFlightSearchLinks(
-                      searchLinks,
-                      group.flights[0]?.origin || '',
-                      destinationName,
-                      group.startDate,
-                      group.endDate
-                    );
-                    return (
-                      <React.Fragment key={group.key}>
-                        <tr className="table-light">
-                          <td colSpan={3}>
-                            <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 py-1">
-                              <div className="d-flex align-items-center gap-2">
-                                <strong>{group.label}</strong>
-                                <Badge bg="secondary" pill>{group.flights.length}</Badge>
-                              </div>
-                              <div className="d-flex gap-2">
-                                {groupSearchLinks.map((sl) => (
-                                  <a key={sl.label} href={sl.url} target="_blank" rel="noreferrer" className="btn btn-outline-warning btn-sm d-inline-flex align-items-center gap-1" title="Link may not pre-fill correctly — work in progress">
-                                    <FaSearch size={10} /> {sl.label} (beta)
-                                  </a>
-                                ))}
-                                <Button size="sm" variant="outline-secondary" onClick={() => prefillDraftFromGroup(group.startDate, group.endDate)}>
-                                  <FaPlus className="me-1" /> Add another
-                                </Button>
-                                <Button size="sm" variant="outline-danger" onClick={() => setPendingClearGroup(group)} title="Clear this group">
-                                  <FaTrash size={11} />
-                                </Button>
-                              </div>
-                            </div>
-                          </td>
-                        </tr>
-                        {group.flights.map((flight) => (
-                          <tr key={flight.id}>
-                            <td>
-                              {editingId === flight.id ? (
-                                <div className="d-flex flex-column gap-2">
-                                  <Form.Control size="sm" placeholder="Description" value={editForm.description || ''} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
-                                  <Form.Control size="sm" placeholder="Origin (e.g. Dublin)" value={editForm.origin || ''} onChange={(e) => setEditForm({ ...editForm, origin: e.target.value })} />
-                                  <DateRangePicker
-                                    startDate={editForm.startDate || ''}
-                                    endDate={editForm.endDate || ''}
-                                    minDate={minDate}
-                                    onChange={(start, end) => setEditForm({ ...editForm, startDate: start, endDate: end })}
-                                  />
-                                  <div className="d-flex gap-2">
-                                    <ClockTimePicker label="Arrives" value={editForm.arrivalTime || ''} onChange={(t) => setEditForm({ ...editForm, arrivalTime: t })} />
-                                    <ClockTimePicker label="Departs" value={editForm.departureTime || ''} onChange={(t) => setEditForm({ ...editForm, departureTime: t })} />
-                                  </div>
-                                  <div className="d-flex gap-2 align-items-center">
-                                    <Form.Control size="sm" placeholder="Link" value={editForm.link || ''} onChange={(e) => setEditForm({ ...editForm, link: e.target.value })} />
-                                    {editForm.link && (
-                                      <a href={editForm.link} target="_blank" rel="noreferrer" className="btn btn-sm btn-outline-secondary" title="Open link"><FaExternalLinkAlt size={12} /></a>
-                                    )}
-                                  </div>
-                                </div>
-                              ) : (
-                                <>
-                                  <div className="fw-semibold">{flight.description || 'Flight Option'}</div>
-                                  {flight.origin && <div className="small subtle-text">From: {flight.origin}</div>}
-                                  <div className="small subtle-text my-1">
-                                    {flight.arrivalTime && `Arrives at ${flight.arrivalTime}`}
-                                    {flight.arrivalTime && flight.departureTime && ' · '}
-                                    {flight.departureTime && `Departs at ${flight.departureTime}`}
-                                  </div>
-                                  <div className="d-flex flex-wrap align-items-center gap-2">
-                                    <a href={flight.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-inline-flex align-items-center gap-1">
-                                      View Deal <FaExternalLinkAlt size={10} />
-                                    </a>
-                                    {flight.createdAt && (
-                                      <span className="small subtle-text" title={new Date(flight.createdAt).toLocaleString()}>Added {formatTimeAgo(flight.createdAt)}</span>
-                                    )}
-                                    {flight.updatedAt && (
-                                      <span className="small subtle-text" title={new Date(flight.updatedAt).toLocaleString()}>Updated {formatTimeAgo(flight.updatedAt)}</span>
-                                    )}
-                                  </div>
-                                </>
-                              )}
-                            </td>
-                            <td style={{ verticalAlign: editingId === flight.id ? 'top' : 'middle' }}>
-                              {editingId === flight.id ? (
-                                <Form.Control size="sm" type="number" step="10" min="0" value={editForm.pricePerPerson} onChange={(e) => setEditForm({ ...editForm, pricePerPerson: Number(e.target.value) })} />
-                              ) : (
-                                <strong>{formatCurrency(flight.pricePerPerson)}</strong>
-                              )}
-                            </td>
-                            <td className="text-end" style={{ verticalAlign: editingId === flight.id ? 'top' : 'middle' }}>
-                              {editingId === flight.id ? (
-                                <div className="d-flex gap-2 justify-content-end">
-                                  <Button size="sm" variant="success" onClick={saveEdit} aria-label="Save flight changes"><FaSave /></Button>
-                                  <Button size="sm" variant="outline-secondary" onClick={cancelEdit}>Cancel</Button>
-                                </div>
-                              ) : (
-                                <div className="d-flex align-items-center gap-2 justify-content-end">
-                                  <VoteButton voters={votes[flight.id] || []} currentPerson={currentPerson} onToggle={() => onToggleVote(flight.id)} />
-                                  <Button variant="link" className="text-secondary p-0" onClick={() => startEdit(flight)} aria-label="Edit flight option"><FaEdit /></Button>
-                                  <Button variant="link" className="text-secondary p-0" onClick={() => handleDuplicate(flight)} aria-label="Duplicate flight option"><FaClone /></Button>
-                                  <Button variant="link" className="text-danger p-0" onClick={() => handleRemove(flight.id)} aria-label="Remove flight option"><FaTrash /></Button>
-                                </div>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </React.Fragment>
-                    );
-                  })}
-                </>
-              ) : (
-                displayedFlights.map((flight) => (
-                  <tr key={flight.id}>
-                    <td>
-                      {editingId === flight.id ? (
-                        <div className="d-flex flex-column gap-2">
-                          <Form.Control size="sm" placeholder="Description" value={editForm.description || ''} onChange={(e) => setEditForm({ ...editForm, description: e.target.value })} />
-                          <Form.Control size="sm" placeholder="Origin (e.g. Dublin)" value={editForm.origin || ''} onChange={(e) => setEditForm({ ...editForm, origin: e.target.value })} />
-                          <DateRangePicker
-                            startDate={editForm.startDate || ''}
-                            endDate={editForm.endDate || ''}
-                            minDate={minDate}
-                            onChange={(start, end) => setEditForm({ ...editForm, startDate: start, endDate: end })}
-                          />
-                          <div className="d-flex gap-2">
-                            <Form.Control size="sm" type="time" value={editForm.arrivalTime || '12:00'} onChange={(e) => setEditForm({ ...editForm, arrivalTime: e.target.value })} />
-                            <Form.Control size="sm" type="time" value={editForm.departureTime || '12:00'} onChange={(e) => setEditForm({ ...editForm, departureTime: e.target.value })} />
-                          </div>
-                          <div className="d-flex gap-2 align-items-center">
-                            <Form.Control size="sm" placeholder="Link" value={editForm.link || ''} onChange={(e) => setEditForm({ ...editForm, link: e.target.value })} />
-                            {editForm.link && (
-                              <a href={editForm.link} target="_blank" rel="noreferrer" className="btn btn-sm btn-outline-secondary" title="Open link"><FaExternalLinkAlt size={12} /></a>
-                            )}
-                          </div>
-                        </div>
-                      ) : (
-                        <>
-                          <div className="fw-semibold">{flight.description || 'Flight Option'}</div>
-                          {flight.origin && <div className="small subtle-text">From: {flight.origin}</div>}
-                          <div className="small subtle-text my-1">
-                            {flight.startDate || 'No start date'}
-                            {flight.arrivalTime && ` (arrives ${flight.arrivalTime})`}
-                            <span className="mx-1">to</span>
-                            {flight.endDate || 'No end date'}
-                            {flight.departureTime && ` (departs ${flight.departureTime})`}
-                          </div>
-                          <div className="d-flex flex-wrap align-items-center gap-2">
-                            <a href={flight.link} target="_blank" rel="noreferrer" className="small text-decoration-none d-inline-flex align-items-center gap-1">
-                              View Deal <FaExternalLinkAlt size={10} />
-                            </a>
-                            {flight.createdAt && (
-                              <span className="small subtle-text" title={new Date(flight.createdAt).toLocaleString()}>Added {formatTimeAgo(flight.createdAt)}</span>
-                            )}
-                          </div>
-                        </>
-                      )}
-                    </td>
-                    <td style={{ verticalAlign: editingId === flight.id ? 'top' : 'middle' }}>
-                      {editingId === flight.id ? (
-                        <Form.Control size="sm" type="number" step="10" min="0" value={editForm.pricePerPerson} onChange={(e) => setEditForm({ ...editForm, pricePerPerson: Number(e.target.value) })} />
-                      ) : (
-                        <strong>{formatCurrency(flight.pricePerPerson)}</strong>
-                      )}
-                    </td>
-                    <td className="text-end" style={{ verticalAlign: editingId === flight.id ? 'top' : 'middle' }}>
-                      {editingId === flight.id ? (
-                        <div className="d-flex gap-2 justify-content-end">
-                          <Button size="sm" variant="success" onClick={saveEdit} aria-label="Save flight changes"><FaSave /></Button>
-                          <Button size="sm" variant="outline-secondary" onClick={cancelEdit}>Cancel</Button>
-                        </div>
-                      ) : (
-                        <div className="d-flex align-items-center gap-2 justify-content-end">
-                          <VoteButton voters={votes[flight.id] || []} currentPerson={currentPerson} onToggle={() => onToggleVote(flight.id)} />
-                          <Button variant="link" className="text-secondary p-0" onClick={() => startEdit(flight)} aria-label="Edit flight option"><FaEdit /></Button>
-                          <Button variant="link" className="text-secondary p-0" onClick={() => handleDuplicate(flight)} aria-label="Duplicate flight option"><FaClone /></Button>
-                          <Button variant="link" className="text-danger p-0" onClick={() => handleRemove(flight.id)} aria-label="Remove flight option"><FaTrash /></Button>
-                        </div>
-                      )}
-                    </td>
-                  </tr>
-                ))
-              )}
+        {/* Flight groups */}
+        {flightGroups.length > 0 ? (
+          flightGroups.map(renderGroup)
+        ) : displayedFlights.length === 0 ? (
+          <div className="group">
+            <div className="group-body" style={{ padding: '24px', textAlign: 'center' }}>
+              <div className="empty-inline-state">
+                {flights.length === 0
+                  ? 'No flights yet. Use the form above to add your first flight option, or paste a booking URL to autofill.'
+                  : 'No matching flights. Adjust filters or add a new option.'}
+              </div>
+            </div>
+          </div>
+        ) : null}
+      </div>
 
-              {displayedFlights.length === 0 && (
-                <tr>
-                  <td colSpan={3} className="text-center py-5">
-                    <div className="empty-inline-state">
-                      {flights.length === 0
-                        ? 'No flights yet. Use the quick-add form above to add your first flight option, or paste a booking URL to autofill.'
-                        : 'No matching flights. Adjust filters or add a new option.'}
-                    </div>
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </Table>
-        </Card.Body>
-      </Card>
-
+      {/* Bulk import modal */}
       <Modal show={showBulkModal} onHide={() => setShowBulkModal(false)} size="lg" centered>
         <Modal.Header closeButton>
           <Modal.Title>Bulk Add Flights</Modal.Title>
@@ -720,7 +963,7 @@ const FlightManager: React.FC<Props> = ({
         <Modal.Body>
           <Form.Label className="fw-semibold">Paste one flight per line</Form.Label>
           <Form.Text className="d-block mb-2 text-muted">
-            Format: `description, price, link, startDate, endDate`
+            Format: description, price, link, startDate, endDate
           </Form.Text>
           <Form.Control
             as="textarea"
@@ -752,7 +995,9 @@ const FlightManager: React.FC<Props> = ({
                         <td>{row.lineNumber}</td>
                         <td>{row.description || '-'}</td>
                         <td>{row.pricePerPerson || '-'}</td>
-                        <td className="text-truncate" style={{ maxWidth: '240px' }}>{row.link || '-'}</td>
+                        <td className="text-truncate" style={{ maxWidth: '240px' }}>
+                          {row.link || '-'}
+                        </td>
                         <td className={row.error ? 'text-danger' : 'text-success'}>{row.error || 'Ready'}</td>
                       </tr>
                     ))}
@@ -763,13 +1008,16 @@ const FlightManager: React.FC<Props> = ({
           )}
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="outline-secondary" onClick={() => setShowBulkModal(false)}>Cancel</Button>
+          <Button variant="outline-secondary" onClick={() => setShowBulkModal(false)}>
+            Cancel
+          </Button>
           <Button variant="primary" onClick={handleBulkImport} disabled={validBulkFlights.length === 0}>
             Import {validBulkFlights.length > 0 ? validBulkFlights.length : ''} Flights
           </Button>
         </Modal.Footer>
       </Modal>
 
+      {/* Clear group confirmation modal */}
       <Modal show={pendingClearGroup !== null} onHide={() => setPendingClearGroup(null)} centered size="sm">
         <Modal.Body className="text-center py-4">
           <div className="mb-3">
@@ -777,18 +1025,28 @@ const FlightManager: React.FC<Props> = ({
           </div>
           <h5 className="fw-semibold mb-2">Clear flight group?</h5>
           <p className="text-muted mb-0">
-            All <strong>{pendingClearGroup?.flights.length}</strong> flight{pendingClearGroup?.flights.length !== 1 ? 's' : ''} in <strong>{pendingClearGroup?.label}</strong> will be permanently removed.
+            All <strong>{pendingClearGroup?.flights.length}</strong> flight
+            {pendingClearGroup?.flights.length !== 1 ? 's' : ''} in{' '}
+            <strong>{pendingClearGroup?.label}</strong> will be permanently removed.
           </p>
         </Modal.Body>
         <Modal.Footer className="justify-content-center border-0 pt-0 pb-3 gap-2">
-          <Button variant="outline-secondary" size="sm" onClick={() => setPendingClearGroup(null)}>Cancel</Button>
-          <Button variant="danger" size="sm" onClick={() => {
-            if (pendingClearGroup) {
-              const idsToRemove = new Set(pendingClearGroup.flights.map((f) => f.id));
-              onChange(flights.filter((f) => !idsToRemove.has(f.id)));
-            }
-            setPendingClearGroup(null);
-          }}>Clear Group</Button>
+          <Button variant="outline-secondary" size="sm" onClick={() => setPendingClearGroup(null)}>
+            Cancel
+          </Button>
+          <Button
+            variant="danger"
+            size="sm"
+            onClick={() => {
+              if (pendingClearGroup) {
+                const idsToRemove = new Set(pendingClearGroup.flights.map((f) => f.id));
+                onChange(flights.filter((f) => !idsToRemove.has(f.id)));
+              }
+              setPendingClearGroup(null);
+            }}
+          >
+            Clear Group
+          </Button>
         </Modal.Footer>
       </Modal>
     </>

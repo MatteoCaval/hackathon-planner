@@ -1,19 +1,17 @@
-import { useEffect, useState } from 'react';
-import { useRef } from 'react';
-import { Button, Container, Form, InputGroup, Modal, Navbar, Offcanvas, Spinner, Table } from 'react-bootstrap';
+import { useEffect, useState, useRef } from 'react';
+import { Form, Modal, Spinner, Table } from 'react-bootstrap';
 import { get, onValue, ref, set, update } from 'firebase/database';
-import Sidebar from './components/Sidebar';
 import DestinationView from './components/DestinationView';
 import AddDestinationModal from './components/AddDestinationModal';
 import DataPersistence from './components/DataPersistence';
-import PersistentBudgetStatus from './components/PersistentBudgetStatus';
+import MapComponent from './components/MapComponent';
 import { useLocalStorage } from './useLocalStorage';
 import { Accommodation, BudgetAttempt, BudgetEstimatorState, Destination, ExtraCost, Flight, PlannerSettings, SearchLinkTemplate, TripVotes } from './types';
 import { DEFAULT_SEARCH_LINKS } from './utils/bookingLinks';
-import PersonSelector from './components/PersonSelector';
 import VoteSummary from './components/VoteSummary';
-import { FaCog, FaLink, FaPlane, FaPlus, FaPoll, FaSync, FaTrash, FaUsers, FaWallet } from 'react-icons/fa';
+import { FaCog, FaClipboard, FaCheck, FaLink, FaPlane, FaPlus, FaPoll, FaSync, FaTrash, FaChevronDown } from 'react-icons/fa';
 import { firebaseDatabase, isFirebaseConfigured } from './firebase';
+import { formatCurrency } from './utils/budget';
 import 'bootstrap/dist/css/bootstrap.min.css';
 import 'leaflet/dist/leaflet.css';
 
@@ -601,9 +599,8 @@ function App() {
   const [settings, setSettings] = useLocalStorage<PlannerSettings>('hackathon-settings', DEFAULT_SETTINGS);
   const settingsRef = useRef<PlannerSettings>(DEFAULT_SETTINGS);
   const [activeId, setActiveId] = useLocalStorage<string | null>('hackathon-active-id', null);
-  const [activeSection, setActiveSection] = useLocalStorage<string>('hackathon-active-section', 'overview');
+  const [, setActiveSection] = useLocalStorage<string>('hackathon-active-section', 'overview');
   const [showAddModal, setShowAddModal] = useState(false);
-  const [showSearchLinksModal, setShowSearchLinksModal] = useState(false);
   const [showVoteSummary, setShowVoteSummary] = useState(false);
   const [showSettingsDrawer, setShowSettingsDrawer] = useState(false);
   const [currentPerson, setCurrentPerson] = useLocalStorage<string>('hackathon-current-person', '');
@@ -622,6 +619,7 @@ function App() {
   const [syncClientId] = useState(getOrCreateSyncClientId);
   const isRemoteUpdate = useRef(false);
   const [syncStatus, setSyncStatus] = useState<'idle' | 'syncing' | 'synced' | 'error'>('idle');
+  void syncStatus;
 
   const isTripSyncAvailable = isFirebaseConfigured && firebaseDatabase !== null;
   const normalizedSyncedCode = normalizeTripCode(syncedTripCode);
@@ -994,7 +992,6 @@ function App() {
   const handleShareTrip = () => {
     const url = new URL(window.location.href);
     url.searchParams.set('trip', normalizedSyncedCode);
-    // Remove hash so the link lands on the default view
     url.hash = '';
     void navigator.clipboard.writeText(url.toString()).then(() => {
       setShareTooltip('Link copied!');
@@ -1005,169 +1002,401 @@ function App() {
     });
   };
 
+  // Header UI state
+  const [personMenuOpen, setPersonMenuOpen] = useState(false);
+  const [newPersonName, setNewPersonName] = useState('');
+  const [syncOpen, setSyncOpen] = useState(false);
+  const [syncDraft, setSyncDraft] = useState('');
+  const [copiedCode, setCopiedCode] = useState(false);
+  const [destMenuOpen, setDestMenuOpen] = useState(false);
+  const personRef = useRef<HTMLDivElement>(null);
+  const syncRef = useRef<HTMLDivElement>(null);
+  const destRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onClick = (e: MouseEvent) => {
+      if (personMenuOpen && personRef.current && !personRef.current.contains(e.target as Node)) setPersonMenuOpen(false);
+      if (syncOpen && syncRef.current && !syncRef.current.contains(e.target as Node)) setSyncOpen(false);
+      if (destMenuOpen && destRef.current && !destRef.current.contains(e.target as Node)) setDestMenuOpen(false);
+    };
+    document.addEventListener('mousedown', onClick);
+    return () => document.removeEventListener('mousedown', onClick);
+  }, [personMenuOpen, syncOpen, destMenuOpen]);
+
+  const copyTripCode = () => {
+    navigator.clipboard?.writeText(normalizedSyncedCode || '');
+    setCopiedCode(true);
+    setTimeout(() => setCopiedCode(false), 1400);
+  };
+
+  const initials = (name: string) => name.split(/\s+/).map(w => w[0]).slice(0, 2).join('').toUpperCase();
+
+  const handleNotesChange = (notes: string) => {
+    if (!activeDestination) return;
+    handleUpdateDestination(activeDestination.id, (d) => ({ ...d, notes }));
+  };
+
   return (
-    <div className="app-shell d-flex flex-column">
-      <Navbar className="app-topbar flex-shrink-0 py-2">
-        <Container fluid className="px-4">
-          <div className="topbar-grid">
-            <div className="d-flex align-items-center gap-3 flex-wrap">
-              <Navbar.Brand className="app-brand d-flex align-items-center gap-2 m-0">
-                <div className="app-brand-icon" aria-hidden="true">
-                  <FaPlane size={16} />
-                </div>
-                <div>
-                  <span>Hackathon Planner</span>
-                  <div className="brand-subtitle">Team trip planning</div>
-                </div>
-              </Navbar.Brand>
-
-              <div className="d-flex align-items-center gap-2">
-                {isSyncing && (
-                  <span className="badge border bg-success-subtle text-success-emphasis border-success-subtle">
-                    Live: {normalizedSyncedCode}
-                  </span>
-                )}
-                {isSyncing && (
-                  <span
-                    title={syncStatus === 'synced' ? 'All changes synced' : syncStatus === 'syncing' ? 'Syncing...' : syncStatus === 'error' ? 'Sync error' : ''}
-                    style={{
-                      display: 'inline-block', width: 10, height: 10, borderRadius: '50%', flexShrink: 0,
-                      backgroundColor: syncStatus === 'synced' ? 'var(--bs-success)' : syncStatus === 'syncing' ? 'var(--bs-warning)' : syncStatus === 'error' ? 'var(--bs-danger)' : 'var(--bs-secondary)',
-                      boxShadow: syncStatus === 'syncing' ? '0 0 0 2px var(--bs-warning-bg-subtle)' : syncStatus === 'synced' ? '0 0 0 2px var(--bs-success-bg-subtle)' : 'none',
-                    }}
-                    aria-label={`Sync status: ${syncStatus}`}
-                  />
-                )}
-                <Button size="sm" variant="outline-secondary" onClick={() => setShowSettingsDrawer(true)} title="Settings" aria-label="Open settings">
-                  <FaCog />
-                </Button>
-              </div>
-            </div>
-          </div>
-        </Container>
-      </Navbar>
-
-      <Offcanvas show={showSettingsDrawer} onHide={() => setShowSettingsDrawer(false)} placement="end">
-        <Offcanvas.Header closeButton>
-          <Offcanvas.Title>Settings</Offcanvas.Title>
-        </Offcanvas.Header>
-        <Offcanvas.Body>
-          <h6 className="text-uppercase text-muted small fw-bold mb-2">Budget</h6>
-          <InputGroup size="sm" className="mb-3">
-            <InputGroup.Text><FaWallet /></InputGroup.Text>
-            <Form.Control type="number" step="10" min="0" placeholder="Total budget" aria-label="Total budget" value={settings.totalBudget} onChange={(e) => handleTotalBudgetChange(e.target.value)} />
-          </InputGroup>
-
-          <h6 className="text-uppercase text-muted small fw-bold mb-2">People</h6>
-          <InputGroup size="sm" className="mb-3">
-            <InputGroup.Text><FaUsers /></InputGroup.Text>
-            <Form.Control type="number" min="1" placeholder="People" aria-label="People count" value={settings.peopleCount} onChange={(e) => handlePeopleCountChange(e.target.value)} />
-          </InputGroup>
-
-          <h6 className="text-uppercase text-muted small fw-bold mb-2">Person</h6>
-          <div className="mb-3">
-            <PersonSelector currentPerson={currentPerson} onPersonChange={setCurrentPerson} tripMembers={tripMembers} onAddMember={handleAddTripMember} />
+    <div className="app-shell">
+      {/* ── Header ── */}
+      <header className="app-header">
+        <div className="header-row">
+          <div className="brand">
+            <div className="brand-mark">T</div>
+            <span>tripfolio</span>
           </div>
 
-          <h6 className="text-uppercase text-muted small fw-bold mb-2">Votes &amp; Links</h6>
-          <div className="d-flex gap-2 mb-4">
-            <Button size="sm" variant="outline-secondary" onClick={() => setShowVoteSummary(true)} title="Vote results"><FaPoll className="me-1" /> Votes</Button>
-            <Button size="sm" variant="outline-secondary" onClick={() => setShowSearchLinksModal(true)} title="Search link settings"><FaCog className="me-1" /> Search Links</Button>
+          <div className="dest-switcher" role="tablist">
+            {destinations.map((d) => (
+              <button
+                key={d.id}
+                role="tab"
+                aria-selected={d.id === activeId}
+                className={`dest-tab${d.id === activeId ? ' is-active' : ''}`}
+                onClick={() => setActiveId(d.id)}
+                onDoubleClick={() => { if (window.confirm(`Remove ${d.name}?`)) handleRemoveDestination(d.id); }}
+                title={`${d.name} (double-click to remove)`}
+              >
+                {d.name}
+              </button>
+            ))}
+            <button className="dest-tab add-tab" onClick={() => setShowAddModal(true)} title="Add destination">
+              <FaPlus size={12} />
+            </button>
           </div>
 
-          <hr />
-
-          <h6 className="text-uppercase text-muted small fw-bold mb-2">Trip Sync</h6>
-          <section className="mb-4" aria-label="Trip sync controls">
-            <div className="d-flex align-items-center gap-2 mb-2">
-              <span className={`badge border ${isSyncing ? 'bg-success-subtle text-success-emphasis border-success-subtle' : isTripSyncAvailable ? 'bg-secondary-subtle text-secondary-emphasis border-secondary-subtle' : 'bg-warning-subtle text-warning-emphasis border-warning-subtle'}`}>
-                {isSyncing ? `Live: ${normalizedSyncedCode}` : isTripSyncAvailable ? 'Not connected' : 'Unavailable'}
-              </span>
-            </div>
-            {isSyncing ? (
-              <div className="d-flex gap-2 align-items-center flex-wrap">
-                <Button size="sm" variant="outline-primary" onClick={handleShareTrip} title="Copy share link"><FaLink className="me-1" /> {shareTooltip || 'Share'}</Button>
-                <Button size="sm" variant="outline-secondary" onClick={handleForceRefresh} title="Pull latest" disabled={syncStatus === 'syncing'}><FaSync className={syncStatus === 'syncing' ? 'spin' : ''} /></Button>
-                <Button size="sm" variant="outline-secondary" onClick={handleLeaveTrip}>Leave</Button>
-              </div>
-            ) : (
-              <div className="d-flex gap-2 align-items-center">
-                <Form.Control size="sm" value={tripCodeInput} onChange={(e) => setTripCodeInput(normalizeTripCode(e.target.value))} placeholder="Trip code" aria-label="Trip code to join" autoCapitalize="characters" autoCorrect="off" spellCheck={false} onKeyDown={(e) => { if (e.key === 'Enter') void handleJoinTrip(); }} />
-                <Button size="sm" variant="outline-secondary" onClick={handleJoinTrip} disabled={!isTripSyncAvailable || normalizeTripCode(tripCodeInput).length < TRIP_CODE_MIN_LENGTH || isJoining}>
-                  {isJoining ? <Spinner animation="border" size="sm" /> : 'Join'}
-                </Button>
+          {/* Mobile destination picker (visible < 900px) */}
+          <div className="dest-picker" ref={destRef}>
+            <button
+              className="dest-picker-trigger"
+              onClick={() => setDestMenuOpen(o => !o)}
+              aria-haspopup="listbox"
+              aria-expanded={destMenuOpen}
+            >
+              <span className="dest-picker-name">{activeDestination?.name || 'Select'}</span>
+              <FaChevronDown size={10} />
+            </button>
+            {destMenuOpen && (
+              <div className="dest-picker-menu" role="listbox">
+                {destinations.map((d) => (
+                  <button
+                    key={d.id}
+                    role="option"
+                    aria-selected={d.id === activeId}
+                    className={`dest-picker-item${d.id === activeId ? ' is-active' : ''}`}
+                    onClick={() => { setActiveId(d.id); setDestMenuOpen(false); }}
+                  >
+                    <span>{d.name}</span>
+                    {d.id === activeId && <FaCheck size={10} style={{ marginLeft: 'auto', color: 'var(--accent)' }} />}
+                  </button>
+                ))}
+                <div className="dest-picker-divider" />
+                <button className="dest-picker-item dest-picker-add" onClick={() => { setDestMenuOpen(false); setShowAddModal(true); }}>
+                  <FaPlus size={10} />
+                  <span>Add destination</span>
+                </button>
               </div>
             )}
-            {!isTripSyncAvailable && (
-              <div className="inline-status warning mt-1" role="status" aria-live="polite">Firebase config missing — sync disabled.</div>
-            )}
-          </section>
+          </div>
 
-          <hr />
+          <div className="header-spacer" />
 
-          <h6 className="text-uppercase text-muted small fw-bold mb-2">Data</h6>
-          <DataPersistence destinations={destinations} onImport={handleImport} />
-        </Offcanvas.Body>
-      </Offcanvas>
-
-      <div className="app-main d-flex flex-grow-1 overflow-hidden">
-        <Sidebar
-          destinations={destinations}
-          activeId={activeId}
-          onSelect={(id) => { setActiveId(id); setActiveSection('overview'); }}
-          onAddClick={() => setShowAddModal(true)}
-          onRemove={handleRemoveDestination}
-          votes={votes.destinations}
-          currentPerson={currentPerson}
-          onToggleVote={(destId) => handleToggleVote('destinations', destId)}
-        />
-
-        <div className="workspace-pane flex-grow-1 d-flex flex-column overflow-hidden">
-          <PersistentBudgetStatus destination={activeDestination} settings={settings} activeSection={activeSection} />
-
-          <main className="app-content flex-grow-1 overflow-auto position-relative" aria-live="polite">
-            {activeDestination ? (
-              <DestinationView
-                destination={activeDestination}
-                onUpdate={handleUpdateDestination}
-                settings={settings}
-                votes={votes}
-                currentPerson={currentPerson}
-                onToggleVote={handleToggleVote}
-                onSectionChange={setActiveSection}
-              />
-            ) : (
-              <section className="empty-state" aria-label="No destination selected">
-                <div>
-                  <div className="empty-state-icon">
-                    <FaPlane size={36} />
+          <div className="header-actions">
+            {/* Sync pill */}
+            <div ref={syncRef} style={{ position: 'relative' }}>
+              <button
+                className={`sync-pill${isSyncing ? '' : ' is-off'}`}
+                onClick={() => { setSyncDraft(isSyncing ? normalizedSyncedCode : tripCodeInput); setSyncOpen(o => !o); }}
+                title={isSyncing ? 'Connected — click to manage' : 'Not connected'}
+              >
+                <span className="dot" />
+                <FaSync size={10} />
+                {isSyncing ? normalizedSyncedCode : 'Connect trip'}
+              </button>
+              {syncOpen && (
+                <div className="sync-popover">
+                  <div className="sync-pop-head">
+                    <div>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{isSyncing ? 'Trip is live' : 'Connect a trip'}</div>
+                      <div style={{ fontSize: 11, color: 'var(--ink-3)', marginTop: 2 }}>
+                        {isSyncing ? 'Anyone with the code can collaborate in real time.' : 'Enter or create a code to share with the group.'}
+                      </div>
+                    </div>
+                    {isSyncing && <span className="live-dot"><span className="dot" /> live</span>}
                   </div>
-                  <h3 className="fw-semibold mb-2">Start a trip workspace</h3>
-                  <p className="subtle-text mb-4">Create a destination, add flights and stay options, then lock your budget.</p>
-                  <Button variant="primary" size="lg" onClick={() => setShowAddModal(true)}>
-                    <FaPlus className="me-2" /> Add Destination
-                  </Button>
-                </div>
-              </section>
-            )}
-          </main>
-        </div>
-      </div>
 
+                  {isSyncing && (
+                    <div className="sync-code-display">
+                      <div className="sync-code">{normalizedSyncedCode}</div>
+                      <button className="btn btn-outline btn-sm" onClick={copyTripCode}>
+                        {copiedCode ? <><FaCheck size={10} /> Copied</> : <><FaClipboard size={10} /> Copy</>}
+                      </button>
+                    </div>
+                  )}
+
+                  <div className="sync-pop-section">
+                    <div className="sync-pop-label">{isSyncing ? 'Switch trip' : 'Trip code'}</div>
+                    <div style={{ display: 'flex', gap: 6 }}>
+                      <input
+                        className="input input-inline"
+                        placeholder="e.g. TRIP2026"
+                        value={syncDraft}
+                        onChange={(e) => setSyncDraft(normalizeTripCode(e.target.value))}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            setTripCodeInput(syncDraft);
+                            setSyncOpen(false);
+                            void handleJoinTrip();
+                          }
+                        }}
+                        style={{ flex: 1, fontFamily: 'var(--font-mono)', letterSpacing: '0.04em' }}
+                      />
+                      <button
+                        className="btn btn-accent btn-sm"
+                        disabled={syncDraft.length < TRIP_CODE_MIN_LENGTH || syncDraft === normalizedSyncedCode}
+                        onClick={() => {
+                          setTripCodeInput(syncDraft);
+                          setSyncOpen(false);
+                          setTimeout(() => void handleJoinTrip(), 0);
+                        }}
+                      >
+                        {isJoining ? <Spinner animation="border" size="sm" /> : (isSyncing ? 'Switch' : 'Connect')}
+                      </button>
+                    </div>
+                    <button className="link-btn" onClick={() => {
+                      const code = 'TRIP' + Math.random().toString(36).slice(2, 6).toUpperCase();
+                      setSyncDraft(code);
+                    }}>Generate new code</button>
+
+                    {isSyncing && (
+                      <button className="link-btn" onClick={() => { handleShareTrip(); setSyncOpen(false); }}>
+                        <FaLink size={10} /> {shareTooltip || 'Copy share link'}
+                      </button>
+                    )}
+                    {isSyncing && (
+                      <button className="link-btn" onClick={() => { handleForceRefresh(); setSyncOpen(false); }}>
+                        <FaSync size={10} /> Pull latest
+                      </button>
+                    )}
+                  </div>
+
+                  {isSyncing && (
+                    <div className="sync-pop-foot">
+                      <button className="link-btn danger" onClick={() => { handleLeaveTrip(); setSyncOpen(false); }}>Disconnect</button>
+                    </div>
+                  )}
+
+                  {!isTripSyncAvailable && (
+                    <div style={{ fontSize: 11, color: 'var(--warning)', marginTop: 8 }}>Firebase not configured — sync unavailable.</div>
+                  )}
+                </div>
+              )}
+            </div>
+
+            {/* Votes */}
+            <button className="btn btn-ghost btn-sm" onClick={() => setShowVoteSummary(true)}>
+              <FaPoll size={12} /> Votes
+            </button>
+
+            {/* Settings */}
+            <button className="btn btn-icon" onClick={() => setShowSettingsDrawer(true)} title="Settings">
+              <FaCog size={14} />
+            </button>
+
+            {/* Person chip */}
+            <div ref={personRef} style={{ position: 'relative' }}>
+              <button className="person-chip" onClick={() => setPersonMenuOpen(o => !o)} aria-expanded={personMenuOpen}>
+                <span className="avatar" style={{ background: '#3a6b8c' }}>{currentPerson ? initials(currentPerson) : '?'}</span>
+                <span>{currentPerson || 'Select person'}</span>
+                <FaChevronDown size={10} style={{ opacity: 0.5, marginLeft: 2 }} />
+              </button>
+              {personMenuOpen && (
+                <div className="person-menu">
+                  <div style={{ padding: '4px 8px 8px', fontSize: 11, color: 'var(--ink-3)', textTransform: 'uppercase', letterSpacing: '0.06em', fontWeight: 600 }}>
+                    Voting as
+                  </div>
+                  {tripMembers.map((name) => (
+                    <div
+                      key={name}
+                      className={`menu-item${name === currentPerson ? ' is-current' : ''}`}
+                      onClick={() => { setCurrentPerson(name); setPersonMenuOpen(false); }}
+                    >
+                      <span className="avatar" style={{ width: 22, height: 22, background: '#3a6b8c', borderRadius: '50%', display: 'grid', placeItems: 'center', color: 'white', fontSize: 10, fontWeight: 600 }}>
+                        {initials(name)}
+                      </span>
+                      <span>{name}</span>
+                    </div>
+                  ))}
+                  <div className="menu-item add">
+                    <input
+                      className="input input-inline"
+                      placeholder="Add yourself…"
+                      value={newPersonName}
+                      onChange={(e) => setNewPersonName(e.target.value)}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' && newPersonName.trim()) {
+                          handleAddTripMember(newPersonName.trim());
+                          setCurrentPerson(newPersonName.trim());
+                          setNewPersonName('');
+                          setPersonMenuOpen(false);
+                        }
+                      }}
+                      style={{ flex: 1, fontSize: 13, padding: '6px 10px' }}
+                    />
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* ── Main content ── */}
+      {activeDestination ? (
+        <main className="page">
+          <div className="main-col">
+            <DestinationView
+              destination={activeDestination}
+              onUpdate={handleUpdateDestination}
+              settings={settings}
+              votes={votes}
+              currentPerson={currentPerson}
+              onToggleVote={handleToggleVote}
+              onSectionChange={setActiveSection}
+            />
+          </div>
+
+          <aside className="aside-col">
+            {/* Map card */}
+            <div className="aside-card map-card">
+              <div className="map-container">
+                <MapComponent
+                  destLat={activeDestination.latitude}
+                  destLng={activeDestination.longitude}
+                  destName={activeDestination.name}
+                />
+              </div>
+              <div className="map-meta">
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <FaPlane size={12} style={{ color: 'var(--ink-3)' }} />
+                  <span style={{ fontSize: 13, fontWeight: 600 }}>Dublin → {activeDestination.name}</span>
+                </div>
+              </div>
+            </div>
+
+            {/* Budget card */}
+            <div className="aside-card budget-card">
+              <h3>Budget overview</h3>
+              {(() => {
+                const totalFlightCost = activeDestination.flights.length > 0
+                  ? Math.min(...activeDestination.flights.map(f => f.pricePerPerson)) * settings.peopleCount
+                  : 0;
+                const totalAccCost = activeDestination.accommodations.length > 0
+                  ? Math.min(...activeDestination.accommodations.map(a => a.totalPrice))
+                  : 0;
+                const total = totalFlightCost + totalAccCost;
+                const remaining = settings.totalBudget - total;
+                const pct = settings.totalBudget > 0 ? Math.min(100, Math.round((total / settings.totalBudget) * 100)) : 0;
+                return (
+                  <>
+                    <div className="totals">
+                      <div className="num">{formatCurrency(total)}</div>
+                      <div className="of">of {formatCurrency(settings.totalBudget)}</div>
+                    </div>
+                    <div className="budget-bar"><div className="fill" style={{ width: pct + '%' }} /></div>
+                    <div style={{ fontSize: 12, color: 'var(--ink-3)', display: 'flex', justifyContent: 'space-between' }}>
+                      <span>{pct}% used</span>
+                      <span style={{ color: remaining < 0 ? 'var(--danger)' : 'var(--positive)' }}>
+                        {remaining < 0 ? `${formatCurrency(Math.abs(remaining))} over` : `${formatCurrency(remaining)} left`}
+                      </span>
+                    </div>
+                    <div className="budget-rows">
+                      <div className="budget-row">
+                        <span>Cheapest flights × {settings.peopleCount}</span>
+                        <span className="v">{formatCurrency(totalFlightCost)}</span>
+                      </div>
+                      <div className="budget-row">
+                        <span>Cheapest stay</span>
+                        <span className="v">{formatCurrency(totalAccCost)}</span>
+                      </div>
+                      <div className="budget-row" style={{ borderTop: '1px solid var(--line)', marginTop: 6, paddingTop: 6 }}>
+                        <span>Per person</span>
+                        <span className="v">{formatCurrency(settings.peopleCount > 0 ? Math.round(total / settings.peopleCount) : 0)}</span>
+                      </div>
+                    </div>
+                  </>
+                );
+              })()}
+            </div>
+
+            {/* Notes card */}
+            <div className="aside-card notes-card">
+              <h3>Notes</h3>
+              <textarea
+                className="notes-area"
+                value={activeDestination.notes}
+                onChange={(e) => handleNotesChange(e.target.value)}
+                placeholder="Anything the team should know about this destination…"
+              />
+            </div>
+
+            {/* Data export */}
+            <div className="aside-card" style={{ padding: 16 }}>
+              <DataPersistence destinations={destinations} onImport={handleImport} />
+            </div>
+          </aside>
+        </main>
+      ) : (
+        <main className="page" style={{ display: 'grid', placeItems: 'center', minHeight: '70vh' }}>
+          <section className="empty-state" aria-label="No destination selected">
+            <div>
+              <div className="empty-state-icon">
+                <FaPlane size={36} />
+              </div>
+              <h3 style={{ fontWeight: 600, marginBottom: 8 }}>Start a trip workspace</h3>
+              <p className="subtle-text" style={{ marginBottom: 24 }}>Create a destination, add flights and stay options, then vote on favorites.</p>
+              <button className="btn btn-accent" style={{ padding: '12px 24px', fontSize: 16 }} onClick={() => setShowAddModal(true)}>
+                <FaPlus style={{ marginRight: 8 }} /> Add Destination
+              </button>
+            </div>
+          </section>
+        </main>
+      )}
+
+      {/* ── Modals ── */}
       <AddDestinationModal
         show={showAddModal}
         onHide={() => setShowAddModal(false)}
         onAdd={handleAddDestination}
       />
 
-      <Modal show={showSearchLinksModal} onHide={() => setShowSearchLinksModal(false)} size="lg" centered>
+      {/* Settings modal */}
+      <Modal show={showSettingsDrawer} onHide={() => setShowSettingsDrawer(false)} size="lg" centered>
         <Modal.Header closeButton>
-          <Modal.Title>Search Link Settings</Modal.Title>
+          <Modal.Title>Settings</Modal.Title>
         </Modal.Header>
         <Modal.Body>
-          <p className="text-muted small mb-3">
-            Customize the booking search links shown in grouped views. Use placeholders: <code>{'{destination}'}</code>, <code>{'{origin}'}</code>, <code>{'{startDate}'}</code>, <code>{'{endDate}'}</code>, <code>{'{people}'}</code>.
-          </p>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 24 }}>
+            <div className="field">
+              <label>Total budget</label>
+              <input className="input" type="number" value={settings.totalBudget} onChange={(e) => handleTotalBudgetChange(e.target.value)} />
+            </div>
+            <div className="field">
+              <label>People on the trip</label>
+              <input className="input" type="number" value={settings.peopleCount} onChange={(e) => handlePeopleCountChange(e.target.value)} />
+            </div>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+            <div>
+              <h5 style={{ margin: 0, fontFamily: 'var(--font-display)', fontSize: 18, fontWeight: 500 }}>Search providers</h5>
+              <div style={{ fontSize: 12, color: 'var(--ink-3)' }}>Templates use {'{destination} {origin} {startDate} {endDate} {people}'}</div>
+            </div>
+            <button className="btn btn-outline btn-sm" onClick={handleSearchLinkAdd}>
+              <FaPlus size={10} /> Add provider
+            </button>
+          </div>
+
           <Table size="sm" bordered>
             <thead>
               <tr>
@@ -1182,55 +1411,31 @@ function App() {
               {(settings.searchLinks || DEFAULT_SEARCH_LINKS).map((link) => (
                 <tr key={link.id}>
                   <td className="text-center align-middle">
-                    <Form.Check
-                      type="switch"
-                      checked={link.enabled}
-                      onChange={(e) => handleSearchLinkUpdate(link.id, { enabled: e.target.checked })}
-                      aria-label={`Toggle ${link.label}`}
-                    />
+                    <Form.Check type="switch" checked={link.enabled} onChange={(e) => handleSearchLinkUpdate(link.id, { enabled: e.target.checked })} />
                   </td>
+                  <td><Form.Control size="sm" value={link.label} onChange={(e) => handleSearchLinkUpdate(link.id, { label: e.target.value })} /></td>
                   <td>
-                    <Form.Control
-                      size="sm"
-                      value={link.label}
-                      onChange={(e) => handleSearchLinkUpdate(link.id, { label: e.target.value })}
-                    />
-                  </td>
-                  <td>
-                    <Form.Select
-                      size="sm"
-                      value={link.type}
-                      onChange={(e) => handleSearchLinkUpdate(link.id, { type: e.target.value as 'flight' | 'accommodation' })}
-                    >
+                    <Form.Select size="sm" value={link.type} onChange={(e) => handleSearchLinkUpdate(link.id, { type: e.target.value as 'flight' | 'accommodation' })}>
                       <option value="flight">Flight</option>
                       <option value="accommodation">Stay</option>
                     </Form.Select>
                   </td>
-                  <td>
-                    <Form.Control
-                      size="sm"
-                      value={link.urlTemplate}
-                      onChange={(e) => handleSearchLinkUpdate(link.id, { urlTemplate: e.target.value })}
-                    />
-                  </td>
+                  <td><Form.Control size="sm" value={link.urlTemplate} onChange={(e) => handleSearchLinkUpdate(link.id, { urlTemplate: e.target.value })} /></td>
                   <td className="text-center align-middle">
-                    <Button variant="link" className="text-danger p-0" onClick={() => handleSearchLinkRemove(link.id)} aria-label={`Remove ${link.label}`}>
-                      <FaTrash />
-                    </Button>
+                    <button className="btn btn-icon" style={{ color: 'var(--danger)' }} onClick={() => handleSearchLinkRemove(link.id)}><FaTrash size={12} /></button>
                   </td>
                 </tr>
               ))}
             </tbody>
           </Table>
-          <div className="d-flex gap-2">
-            <Button size="sm" variant="outline-primary" onClick={handleSearchLinkAdd}>
-              <FaPlus className="me-1" /> Add Link
-            </Button>
-            <Button size="sm" variant="outline-secondary" onClick={handleSearchLinksReset}>
-              Reset to Defaults
-            </Button>
+          <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+            <button className="btn btn-outline btn-sm" onClick={handleSearchLinksReset}>Reset to Defaults</button>
           </div>
         </Modal.Body>
+        <Modal.Footer>
+          <button className="btn btn-ghost" onClick={() => setShowSettingsDrawer(false)}>Cancel</button>
+          <button className="btn btn-primary" onClick={() => setShowSettingsDrawer(false)}>Done</button>
+        </Modal.Footer>
       </Modal>
 
       <VoteSummary
@@ -1253,13 +1458,13 @@ function App() {
               : <> Joining will <strong>replace your current local data</strong> with the remote trip.</>
             }
           </p>
-          <p className="text-muted small mb-0">
+          <p style={{ color: 'var(--ink-3)', fontSize: 13, marginBottom: 0 }}>
             You can use the Export button to save your current data before joining.
           </p>
         </Modal.Body>
         <Modal.Footer>
-          <Button variant="outline-secondary" onClick={handleCancelJoin}>Cancel</Button>
-          <Button variant="primary" onClick={handleConfirmJoin}>Join Trip</Button>
+          <button className="btn btn-ghost" onClick={handleCancelJoin}>Cancel</button>
+          <button className="btn btn-accent" onClick={handleConfirmJoin}>Join Trip</button>
         </Modal.Footer>
       </Modal>
     </div>

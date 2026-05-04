@@ -1,7 +1,6 @@
-import React, { useMemo, useState, useRef, useEffect } from 'react';
-import { Card, Form, Row, Col, Button, Alert } from 'react-bootstrap';
+import React, { useMemo } from 'react';
 import { Flight, Accommodation, ExtraCost, PlannerSettings, BudgetAttempt } from '../types';
-import { FaPlane, FaBed, FaCalculator, FaPlus, FaTrash, FaFlask, FaSync } from 'react-icons/fa';
+import { FaPlane, FaBed, FaPlus, FaTrash, FaTag, FaBookmark, FaTh, FaArrowRight } from 'react-icons/fa';
 import { calculateBudgetSnapshot, formatCurrency } from '../utils/budget';
 
 interface Props {
@@ -27,99 +26,19 @@ const createAttemptId = (): string => {
   return `attempt-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 };
 
-const areAssignmentsEqual = (left: Record<string, number>, right: Record<string, number>): boolean => {
-  const leftEntries = Object.entries(left).filter(([, count]) => count > 0);
-  const rightEntries = Object.entries(right).filter(([, count]) => count > 0);
-
-  if (leftEntries.length !== rightEntries.length) {
-    return false;
-  }
-
-  return leftEntries.every(([flightId, count]) => right[flightId] === count);
+const fmtDateRange = (start: string, end: string): string => {
+  if (!start || !end) return '';
+  const da = new Date(start + 'T00:00');
+  const db = new Date(end + 'T00:00');
+  const sameMonth = da.getMonth() === db.getMonth() && da.getFullYear() === db.getFullYear();
+  const opts: Intl.DateTimeFormatOptions = { month: 'short', day: 'numeric' };
+  const aStr = da.toLocaleDateString('en-GB', opts);
+  const bStr = sameMonth ? String(db.getDate()) : db.toLocaleDateString('en-GB', opts);
+  return `${aStr} – ${bStr}`;
 };
 
-const AccommodationDropdown: React.FC<{
-  accommodations: Accommodation[];
-  selectedId: string;
-  onChange: (id: string) => void;
-}> = ({ accommodations, selectedId, onChange }) => {
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const selected = accommodations.find((a) => a.id === selectedId);
-
-  useEffect(() => {
-    const handler = (e: MouseEvent) => {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener('mousedown', handler);
-    return () => document.removeEventListener('mousedown', handler);
-  }, []);
-
-  const select = (id: string) => { onChange(id); setOpen(false); };
-
-  return (
-    <div ref={ref} style={{ position: 'relative' }}>
-      <button
-        type="button"
-        onClick={() => setOpen((o) => !o)}
-        style={{
-          width: '100%', display: 'flex', alignItems: 'center', gap: 8,
-          padding: '6px 10px', background: 'var(--bs-body-bg)', border: '1px solid var(--bs-border-color)',
-          borderRadius: 6, cursor: 'pointer', textAlign: 'left', color: 'var(--bs-body-color)'
-        }}
-      >
-        {selected ? (
-          <>
-            {selected.imageUrl && (
-              <img src={selected.imageUrl} alt="" style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />
-            )}
-            <span className="small flex-grow-1">{formatCurrency(selected.totalPrice)} — {selected.description || 'Accommodation option'}</span>
-          </>
-        ) : (
-          <span className="small text-muted flex-grow-1">— Select accommodation —</span>
-        )}
-        <span style={{ fontSize: 10, opacity: 0.5 }}>▼</span>
-      </button>
-
-      {open && (
-        <div style={{
-          position: 'absolute', zIndex: 'var(--z-dropdown)' as unknown as number, width: '100%', top: 'calc(100% + 4px)',
-          background: 'var(--bs-body-bg)', border: '1px solid var(--bs-border-color)',
-          borderRadius: 'var(--radius-sm)', boxShadow: 'var(--shadow-md)', maxHeight: 260, overflowY: 'auto'
-        }}>
-          <div
-            onClick={() => select('')}
-            style={{ display: 'flex', alignItems: 'center', padding: '8px 10px', cursor: 'pointer', gap: 8 }}
-            className="dropdown-item small text-muted"
-          >
-            — Select accommodation —
-          </div>
-          {accommodations.map((acc) => (
-            <div
-              key={acc.id}
-              onClick={() => select(acc.id)}
-              style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '6px 10px', cursor: 'pointer',
-                background: acc.id === selectedId ? 'var(--bs-primary-bg-subtle)' : undefined
-              }}
-              className="dropdown-item"
-            >
-              {acc.imageUrl ? (
-                <img src={acc.imageUrl} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />
-              ) : (
-                <div style={{ width: 40, height: 40, borderRadius: 4, flexShrink: 0, background: 'var(--bs-secondary-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🏨</div>
-              )}
-              <div className="small">
-                <div>{acc.description || 'Accommodation option'}</div>
-                <div className="text-muted">{formatCurrency(acc.totalPrice)}</div>
-              </div>
-            </div>
-          ))}
-        </div>
-      )}
-    </div>
-  );
-};
+const nightsBetween = (a: string, b: string): number =>
+  a && b ? Math.max(1, Math.round((new Date(b).getTime() - new Date(a).getTime()) / 86400000)) : 0;
 
 const BudgetCalculator: React.FC<Props> = ({
   flights,
@@ -136,63 +55,53 @@ const BudgetCalculator: React.FC<Props> = ({
   onAttemptsChange,
   onFixedAttemptIdChange
 }) => {
-  const snapshot = useMemo(() => {
-    return calculateBudgetSnapshot({
-      flights,
-      accommodations,
-      flightAssignments,
-      selectedAccommodationId,
-      extraCosts,
-      settings
-    });
-  }, [flights, accommodations, flightAssignments, selectedAccommodationId, extraCosts, settings]);
+  const snapshot = useMemo(() => calculateBudgetSnapshot({
+    flights, accommodations, flightAssignments, selectedAccommodationId, extraCosts, settings
+  }), [flights, accommodations, flightAssignments, selectedAccommodationId, extraCosts, settings]);
 
-  const savedAttempt = attempts.find((attempt) => attempt.id === fixedAttemptId) ?? attempts[0] ?? null;
-  const isOverAssigned = snapshot.isOverAssigned;
-  const hasUnsavedChanges = savedAttempt
-    ? (
-      savedAttempt.selectedAccommodationId !== selectedAccommodationId ||
-      !areAssignmentsEqual(savedAttempt.flightAssignments, flightAssignments) ||
-      savedAttempt.totalCost !== snapshot.totalCost
-    )
-    : false;
+  const assignedTotal = useMemo(() =>
+    Object.values(flightAssignments).reduce((a, b) => a + (b || 0), 0),
+  [flightAssignments]);
 
-  const handleAssignmentChange = (flightId: string, count: number) => {
-    if (count < 0) {
-      return;
-    }
+  const isOverAssigned = assignedTotal > settings.peopleCount;
+  const isUnderAssigned = assignedTotal > 0 && assignedTotal < settings.peopleCount;
 
-    const nextAssignments = { ...flightAssignments };
-    if (count === 0) {
-      delete nextAssignments[flightId];
-    } else {
-      nextAssignments[flightId] = count;
-    }
-
-    onFlightAssignmentsChange(nextAssignments);
+  const setAssignment = (flightId: string, count: number) => {
+    const c = Math.max(0, count);
+    const next = { ...flightAssignments };
+    if (c === 0) delete next[flightId]; else next[flightId] = c;
+    onFlightAssignmentsChange(next);
   };
+
+  const distributeEvenly = () => {
+    if (flights.length === 0) return;
+    const per = Math.floor(settings.peopleCount / flights.length);
+    let rem = settings.peopleCount - per * flights.length;
+    const next: Record<string, number> = {};
+    for (const f of flights) {
+      const c = per + (rem > 0 ? 1 : 0);
+      if (c > 0) next[f.id] = c;
+      if (rem > 0) rem--;
+    }
+    onFlightAssignmentsChange(next);
+  };
+
+  const clearAssignments = () => onFlightAssignmentsChange({});
 
   const handleAddExtraCost = () => {
     onExtraCostsChange([...extraCosts, { description: '', value: 0 }]);
   };
 
   const handleExtraCostChange = (index: number, updates: Partial<ExtraCost>) => {
-    const updatedExtraCosts = extraCosts.map((extraCost, currentIndex) => {
-      if (currentIndex !== index) {
-        return extraCost;
-      }
-      return { ...extraCost, ...updates };
-    });
-    onExtraCostsChange(updatedExtraCosts);
+    onExtraCostsChange(extraCosts.map((e, i) => i === index ? { ...e, ...updates } : e));
   };
 
   const handleRemoveExtraCost = (index: number) => {
-    onExtraCostsChange(extraCosts.filter((_, currentIndex) => currentIndex !== index));
+    onExtraCostsChange(extraCosts.filter((_, i) => i !== index));
   };
 
-  const saveBaseline = () => {
+  const saveScenario = () => {
     if (attempts.length >= 5) return;
-
     const newAttempt: BudgetAttempt = {
       id: createAttemptId(),
       name: `Scenario ${attempts.length + 1}`,
@@ -203,290 +112,271 @@ const BudgetCalculator: React.FC<Props> = ({
       remaining: snapshot.remaining,
       perPersonTotal: snapshot.perPersonTotal
     };
-
     onAttemptsChange([...attempts, newAttempt]);
     onFixedAttemptIdChange(newAttempt.id);
   };
 
-  const applySavedBaseline = (attempt?: BudgetAttempt | null) => {
-    const target = attempt ?? savedAttempt;
-    if (!target) return;
-
-    onFlightAssignmentsChange({ ...target.flightAssignments });
-    onSelectedAccommodationChange(target.selectedAccommodationId);
-    onFixedAttemptIdChange(target.id);
+  const loadScenario = (attempt: BudgetAttempt) => {
+    onFlightAssignmentsChange({ ...attempt.flightAssignments });
+    onSelectedAccommodationChange(attempt.selectedAccommodationId);
+    onFixedAttemptIdChange(attempt.id);
   };
 
-  const replaceSavedWithCurrent = () => {
-    if (!savedAttempt) return;
-
-    const updatedAttempt: BudgetAttempt = {
-      ...savedAttempt,
-      createdAt: Date.now(),
-      flightAssignments: { ...flightAssignments },
-      selectedAccommodationId,
-      totalCost: snapshot.totalCost,
-      remaining: snapshot.remaining,
-      perPersonTotal: snapshot.perPersonTotal
-    };
-
-    onAttemptsChange(attempts.map((a) => a.id === savedAttempt.id ? updatedAttempt : a));
-  };
-
-  const deleteBaseline = (attemptId: string) => {
-    const next = attempts.filter((a) => a.id !== attemptId);
+  const deleteScenario = (id: string) => {
+    const next = attempts.filter((a) => a.id !== id);
     onAttemptsChange(next);
-    if (fixedAttemptId === attemptId) {
-      onFixedAttemptIdChange(next[0]?.id || '');
-    }
+    if (fixedAttemptId === id) onFixedAttemptIdChange(next[0]?.id || '');
   };
 
-  const distributeEvenly = () => {
-    if (flights.length === 0) return;
-    const perFlight = Math.floor(settings.peopleCount / flights.length);
-    let remainder = settings.peopleCount - perFlight * flights.length;
-    const next: Record<string, number> = {};
-    for (const flight of flights) {
-      next[flight.id] = perFlight + (remainder > 0 ? 1 : 0);
-      if (remainder > 0) remainder--;
-    }
-    onFlightAssignmentsChange(next);
+  const renameScenario = (id: string, name: string) => {
+    onAttemptsChange(attempts.map((a) => a.id === id ? { ...a, name } : a));
   };
 
   return (
-    <div className="budget-layout">
-      {isOverAssigned && (
-        <Alert variant="danger" className="mb-0">
-          Assigned travelers exceed team size. Reduce allocations to {settings.peopleCount}.
-        </Alert>
-      )}
+    <section className="section" id="planner">
+      <div className="section-head">
+        <div>
+          <h2 className="section-title">Final plan</h2>
+          <div className="section-sub">Assign people to flights, pick a stay, add extras — see the total update live.</div>
+        </div>
+        <div className="section-actions">
+          <span className="section-meta">{settings.peopleCount} traveller{settings.peopleCount === 1 ? '' : 's'}</span>
+        </div>
+      </div>
 
-      <Card className="workspace-card budget-hero-card">
-        <Card.Body>
-          <div className="d-flex align-items-center justify-content-between gap-3 flex-wrap mb-4">
-            <div className="d-flex align-items-center gap-3">
-              <div className="budget-icon" aria-hidden="true">
-                <FaCalculator size={20} />
-              </div>
-              <div>
-                <h2 className="workspace-card-title m-0">Budget Strategy</h2>
-                <p className="subtle-text mb-0">Save one baseline, then continue exploring changes until you choose to override it.</p>
-              </div>
-            </div>
-          </div>
+      {/* Budget metric strip */}
+      <div className="budget-strip">
+        <div className="bs-cell">
+          <span className="bs-label">Flights</span>
+          <span className="bs-val">{formatCurrency(snapshot.flightCost)}</span>
+        </div>
+        <div className="bs-cell">
+          <span className="bs-label">Stay</span>
+          <span className="bs-val">{formatCurrency(snapshot.accommodationCost)}</span>
+        </div>
+        <div className="bs-cell">
+          <span className="bs-label">Extras</span>
+          <span className="bs-val">{formatCurrency(snapshot.extraCostsCost)}</span>
+        </div>
+        <div className="bs-cell bs-total">
+          <span className="bs-label">Total</span>
+          <span className="bs-val">{formatCurrency(snapshot.totalCost)}</span>
+        </div>
+        <div className={`bs-cell ${snapshot.remaining < 0 ? 'bs-over' : 'bs-under'}`}>
+          <span className="bs-label">{snapshot.remaining < 0 ? 'Over budget' : 'Remaining'}</span>
+          <span className="bs-val">{formatCurrency(Math.abs(snapshot.remaining))}</span>
+        </div>
+        <div className="bs-cell">
+          <span className="bs-label">Per person</span>
+          <span className="bs-val">{formatCurrency(snapshot.perPersonTotal)}</span>
+        </div>
+      </div>
 
-          <div className="budget-metric-grid" aria-live="polite">
-            <div className="budget-metric">
-              <span>Flights</span>
-              <strong>{formatCurrency(snapshot.flightCost)}</strong>
-            </div>
-            <div className="budget-metric">
-              <span>Stay</span>
-              <strong>{formatCurrency(snapshot.accommodationCost)}</strong>
-            </div>
-            <div className="budget-metric">
-              <span>Extras</span>
-              <strong>{formatCurrency(snapshot.extraCostsCost)}</strong>
-            </div>
-            <div className="budget-metric">
-              <span>Total</span>
-              <strong>{formatCurrency(snapshot.totalCost)}</strong>
-            </div>
-            <div className={`budget-metric ${snapshot.remaining < 0 ? 'negative' : ''}`}>
-              <span>Remaining</span>
-              <strong>{formatCurrency(snapshot.remaining)}</strong>
-            </div>
-            <div className="budget-metric">
-              <span>Per Person</span>
-              <strong>{formatCurrency(snapshot.perPersonTotal)}</strong>
-            </div>
-          </div>
-        </Card.Body>
-      </Card>
-
-      <Card className="workspace-card">
-        <Card.Header className="workspace-card-header">
-          <div className="d-flex align-items-center justify-content-between gap-2 flex-wrap">
+      <div className="planner-grid">
+        {/* Flight assignments */}
+        <div className="planner-card">
+          <div className="pc-head">
             <div>
-              <h3 className="workspace-card-title m-0">Saved Scenarios</h3>
-              <p className="subtle-text mb-0">Save up to 5 budget scenarios to compare options.</p>
+              <div className="pc-title"><FaPlane size={14} /> Flight assignments</div>
+              <div className="pc-sub">
+                {assignedTotal} of {settings.peopleCount} assigned
+                {isOverAssigned && <span className="warn"> · over by {assignedTotal - settings.peopleCount}</span>}
+                {isUnderAssigned && <span className="info"> · {settings.peopleCount - assignedTotal} unassigned</span>}
+              </div>
             </div>
-            <Button
-              variant="primary"
-              size="sm"
-              onClick={saveBaseline}
-              className="d-inline-flex align-items-center gap-2"
-              disabled={attempts.length >= 5}
-            >
-              <FaFlask />
-              Save Current
-            </Button>
+            <div className="pc-actions">
+              <button className="btn btn-ghost btn-xs" onClick={distributeEvenly} disabled={flights.length === 0}>
+                <FaTh size={10} /> Split evenly
+              </button>
+              <button className="btn btn-ghost btn-xs" onClick={clearAssignments} disabled={assignedTotal === 0}>Clear</button>
+            </div>
           </div>
-        </Card.Header>
-        <Card.Body>
-          {attempts.length === 0 ? (
-            <div className="empty-inline-state">No saved scenarios yet. Save your current setup when it looks good.</div>
+
+          {flights.length === 0 ? (
+            <div className="pc-empty">No flights yet. Add some above.</div>
           ) : (
-            <div className="d-flex flex-column gap-3">
-              {attempts.map((attempt) => {
-                const isActive = attempt.id === fixedAttemptId;
-                const delta = snapshot.totalCost - attempt.totalCost;
+            <div className="assign-list">
+              {flights.map((f) => {
+                const count = flightAssignments[f.id] || 0;
+                const subtotal = count * f.pricePerPerson;
+                const dateStr = fmtDateRange(f.startDate, f.endDate);
                 return (
-                  <section key={attempt.id} className={`fixed-attempt-panel ${isActive ? '' : 'opacity-75'}`}>
-                    <div>
-                      <div className="d-flex align-items-center gap-2">
-                        <div className="fw-semibold">{attempt.name}</div>
-                        {isActive && <span className="badge bg-primary-subtle text-primary-emphasis">Active</span>}
-                      </div>
-                      <div className="small subtle-text">
-                        {formatCurrency(attempt.totalCost)} total &bull; {formatCurrency(attempt.remaining)} remaining &bull; {formatCurrency(attempt.perPersonTotal)} pp
-                      </div>
-                      <div className="small subtle-text">Saved {new Date(attempt.createdAt).toLocaleString()}</div>
-                      {delta !== 0 && (
-                        <div className="small text-warning-emphasis fw-semibold">
-                          Current is {formatCurrency(Math.abs(delta))} {delta > 0 ? 'above' : 'below'}
-                        </div>
-                      )}
+                  <div key={f.id} className={`assign-row${count > 0 ? ' is-assigned' : ''}`}>
+                    <div className="ar-route">
+                      <span className="iata-pill">{f.origin || 'DUB'}</span>
+                      <FaArrowRight size={10} style={{ color: 'var(--ink-4)' }} />
+                      <span className="ar-desc">{f.description || 'Flight'}</span>
                     </div>
-                    <div className="d-flex align-items-center gap-2 flex-wrap">
-                      <Button size="sm" variant={isActive ? 'outline-primary' : 'outline-secondary'} onClick={() => applySavedBaseline(attempt)}>
-                        Apply
-                      </Button>
-                      {isActive && (
-                        <Button size="sm" variant="outline-secondary" onClick={replaceSavedWithCurrent} disabled={!hasUnsavedChanges} className="d-inline-flex align-items-center gap-1">
-                          <FaSync size={10} /> Override
-                        </Button>
-                      )}
-                      <Button size="sm" variant="link" className="text-danger text-decoration-none p-0" onClick={() => deleteBaseline(attempt.id)}>
-                        <FaTrash size={12} />
-                      </Button>
+                    <div className="ar-counter">
+                      <button className="cnt-btn" onClick={() => setAssignment(f.id, count - 1)} disabled={count === 0}>−</button>
+                      <input
+                        type="number"
+                        min={0}
+                        max={settings.peopleCount}
+                        value={count}
+                        onChange={(e) => setAssignment(f.id, parseInt(e.target.value, 10) || 0)}
+                        className="cnt-input"
+                      />
+                      <button className="cnt-btn" onClick={() => setAssignment(f.id, count + 1)}>+</button>
                     </div>
-                  </section>
+                    <div className="ar-meta">
+                      <span className="ar-time">
+                        {f.departureTime || '—'} → {f.arrivalTime || '—'}
+                        {dateStr && ` · ${dateStr}`}
+                        {` · ${formatCurrency(f.pricePerPerson)}/pp`}
+                      </span>
+                    </div>
+                    <div className="ar-subtotal">
+                      {count > 0 ? formatCurrency(subtotal) : <span className="muted">—</span>}
+                    </div>
+                  </div>
                 );
               })}
             </div>
           )}
-        </Card.Body>
-      </Card>
+        </div>
 
-      <Row className="g-4">
-        <Col xl={12}>
-          <Card className="workspace-card h-100">
-            <Card.Header className="workspace-card-header">
-              <h3 className="workspace-card-title m-0">Cost Inputs</h3>
-            </Card.Header>
-            <Card.Body>
-              <Form.Group className="mb-4">
-                <Form.Label className="d-flex align-items-center justify-content-between gap-2 mb-2">
-                  <span className="d-flex align-items-center gap-2"><FaPlane /> Flight allocations</span>
-                  {flights.length > 0 && (
-                    <Button size="sm" variant="outline-secondary" onClick={distributeEvenly}>
-                      Distribute evenly
-                    </Button>
-                  )}
-                </Form.Label>
-                <div className="input-surface">
-                  <div className={`small mb-3 ${isOverAssigned ? 'text-danger fw-semibold' : 'subtle-text'}`}>
-                    Assigned: {snapshot.assignedPeopleCount} / {settings.peopleCount} travelers
+        {/* Stay selection */}
+        <div className="planner-card">
+          <div className="pc-head">
+            <div>
+              <div className="pc-title"><FaBed size={14} /> Selected stay</div>
+              <div className="pc-sub">Pick one option to lock in for the trip.</div>
+            </div>
+          </div>
+
+          {accommodations.length === 0 ? (
+            <div className="pc-empty">No stays yet.</div>
+          ) : (
+            <div className="stay-radio-list">
+              <label className={`stay-radio${!selectedAccommodationId ? ' is-selected' : ''}`}>
+                <input type="radio" name="stay-select" checked={!selectedAccommodationId} onChange={() => onSelectedAccommodationChange('')} />
+                <div className="sr-content">
+                  <div className="sr-name muted">— No stay selected —</div>
+                </div>
+              </label>
+              {accommodations.map((acc) => {
+                const nights = nightsBetween(acc.startDate, acc.endDate);
+                return (
+                  <label key={acc.id} className={`stay-radio${selectedAccommodationId === acc.id ? ' is-selected' : ''}`}>
+                    <input type="radio" name="stay-select" checked={selectedAccommodationId === acc.id} onChange={() => onSelectedAccommodationChange(acc.id)} />
+                    {acc.imageUrl ? (
+                      <img src={acc.imageUrl} alt="" className="sr-thumb" />
+                    ) : (
+                      <div className="sr-thumb sr-thumb-empty"><FaBed size={14} /></div>
+                    )}
+                    <div className="sr-content">
+                      <div className="sr-name">{acc.description || 'Accommodation'}</div>
+                      <div className="sr-meta">
+                        {fmtDateRange(acc.startDate, acc.endDate)}
+                        {nights > 0 && ` · ${nights} night${nights === 1 ? '' : 's'}`}
+                        {acc.rooms && ` · ${acc.rooms} room${acc.rooms === 1 ? '' : 's'}`}
+                      </div>
+                    </div>
+                    <div className="sr-price">{formatCurrency(acc.totalPrice)}</div>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Extras */}
+        <div className="planner-card planner-card-wide">
+          <div className="pc-head">
+            <div>
+              <div className="pc-title"><FaTag size={14} /> Extras</div>
+              <div className="pc-sub">Taxis, baggage, dinners — anything that's not a flight or stay.</div>
+            </div>
+            <div className="pc-actions">
+              <button className="btn btn-outline btn-xs" onClick={handleAddExtraCost}>
+                <FaPlus size={10} /> Add line item
+              </button>
+            </div>
+          </div>
+
+          {extraCosts.length === 0 ? (
+            <div className="pc-empty">No extras yet. Click "Add line item" to track baggage, taxis, etc.</div>
+          ) : (
+            <div className="extras-list">
+              {extraCosts.map((e, i) => (
+                <div key={i} className="extra-row">
+                  <input
+                    className="input input-sm"
+                    placeholder="Label (e.g. Airport taxi)"
+                    value={e.description}
+                    onChange={(ev) => handleExtraCostChange(i, { description: ev.target.value })}
+                  />
+                  <input
+                    className="input input-sm input-num"
+                    type="number"
+                    placeholder="0"
+                    min={0}
+                    step={1}
+                    value={e.value || ''}
+                    onChange={(ev) => {
+                      const parsed = Number(ev.target.value);
+                      handleExtraCostChange(i, { value: Number.isFinite(parsed) && parsed >= 0 ? parsed : 0 });
+                    }}
+                  />
+                  <div className="extra-subtotal">{formatCurrency(e.value)}</div>
+                  <button className="btn btn-icon" style={{ width: 28, height: 28 }} title="Remove" onClick={() => handleRemoveExtraCost(i)}>
+                    <FaTrash size={11} />
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Scenarios */}
+        <div className="planner-card planner-card-wide">
+          <div className="pc-head">
+            <div>
+              <div className="pc-title"><FaBookmark size={14} /> Saved scenarios</div>
+              <div className="pc-sub">Compare different combinations side-by-side. Up to 5.</div>
+            </div>
+            <div className="pc-actions">
+              <button className="btn btn-accent btn-xs" onClick={saveScenario} disabled={attempts.length >= 5}>
+                <FaPlus size={10} /> Save current
+              </button>
+            </div>
+          </div>
+
+          {attempts.length === 0 ? (
+            <div className="pc-empty">No saved scenarios yet. Configure your plan above and save it to compare alternatives.</div>
+          ) : (
+            <div className="scenarios-grid">
+              {attempts.map((sc) => {
+                const isFixed = sc.id === fixedAttemptId;
+                return (
+                  <div key={sc.id} className={`scenario-card${isFixed ? ' is-fixed' : ''}`}>
+                    <div className="sc-head">
+                      <input
+                        className="sc-name"
+                        value={sc.name}
+                        onChange={(e) => renameScenario(sc.id, e.target.value)}
+                      />
+                      {isFixed && <span className="sc-pinned">Pinned</span>}
+                    </div>
+                    <div className="sc-body">
+                      <div className="sc-row"><span>Total</span><strong>{formatCurrency(sc.totalCost)}</strong></div>
+                      <div className="sc-row"><span>Per person</span><strong>{formatCurrency(sc.perPersonTotal)}</strong></div>
+                    </div>
+                    <div className="sc-foot">
+                      <button className="btn btn-outline btn-xs" onClick={() => loadScenario(sc)}>Load</button>
+                      <button className="btn btn-icon" style={{ width: 28, height: 28 }} title="Delete" onClick={() => deleteScenario(sc.id)}>
+                        <FaTrash size={11} />
+                      </button>
+                    </div>
                   </div>
-                  {flights.length === 0 ? (
-                    <div className="empty-inline-state">No flights available yet.</div>
-                  ) : (
-                    flights.map((flight) => (
-                      <div key={flight.id} className="assignment-row">
-                        <div>
-                          <div className="fw-semibold">{flight.description || 'Unnamed flight'}</div>
-                          <div className="small subtle-text">
-                            {formatCurrency(flight.pricePerPerson)} per person
-                            {(flight.arrivalTime || flight.departureTime) && (
-                              <span className="ms-2">
-                                {flight.arrivalTime && <span>✈ arrives {flight.arrivalTime}</span>}
-                                {flight.arrivalTime && flight.departureTime && <span className="mx-1">·</span>}
-                                {flight.departureTime && <span>departs {flight.departureTime}</span>}
-                              </span>
-                            )}
-                          </div>
-                        </div>
-                        <Form.Control
-                          type="number"
-                          size="sm"
-                          min="0"
-                          max={settings.peopleCount}
-                          value={flightAssignments[flight.id] || ''}
-                          onChange={(e) => handleAssignmentChange(flight.id, parseInt(e.target.value, 10) || 0)}
-                          isInvalid={isOverAssigned}
-                          aria-label={`People assigned to ${flight.description || 'flight option'}`}
-                          style={{ width: '92px' }}
-                        />
-                      </div>
-                    ))
-                  )}
-                </div>
-              </Form.Group>
-
-              <Form.Group className="mb-4">
-                <Form.Label className="d-flex align-items-center gap-2 mb-2">
-                  <FaBed /> Accommodation
-                </Form.Label>
-                <AccommodationDropdown
-                  accommodations={accommodations}
-                  selectedId={selectedAccommodationId}
-                  onChange={onSelectedAccommodationChange}
-                />
-              </Form.Group>
-
-              <Form.Group>
-                <Form.Label className="d-flex align-items-center justify-content-between gap-2 mb-2">
-                  <span>Extra costs</span>
-                  <Button variant="outline-secondary" size="sm" onClick={handleAddExtraCost}>
-                    <FaPlus className="me-1" /> Add cost
-                  </Button>
-                </Form.Label>
-                <div className="input-surface">
-                  {extraCosts.length === 0 ? (
-                    <div className="empty-inline-state">No extra costs yet.</div>
-                  ) : (
-                    extraCosts.map((extraCost, index) => (
-                      <div key={`extra-cost-${index}`} className="extra-row">
-                        <Form.Control
-                          size="sm"
-                          placeholder="Description"
-                          value={extraCost.description}
-                          onChange={(e) => handleExtraCostChange(index, { description: e.target.value })}
-                          aria-label={`Extra cost description ${index + 1}`}
-                        />
-                        <Form.Control
-                          size="sm"
-                          type="number"
-                          min="0"
-                          step="10"
-                          placeholder="0"
-                          value={extraCost.value || ''}
-                          onChange={(e) => {
-                            const parsedValue = Number(e.target.value);
-                            handleExtraCostChange(index, { value: Number.isFinite(parsedValue) && parsedValue >= 0 ? parsedValue : 0 });
-                          }}
-                          aria-label={`Extra cost amount ${index + 1}`}
-                        />
-                        <Button
-                          variant="link"
-                          className="text-danger p-0 d-flex align-items-center justify-content-center"
-                          onClick={() => handleRemoveExtraCost(index)}
-                          aria-label={`Remove extra cost row ${index + 1}`}
-                        >
-                          <FaTrash />
-                        </Button>
-                      </div>
-                    ))
-                  )}
-                </div>
-              </Form.Group>
-            </Card.Body>
-          </Card>
-        </Col>
-      </Row>
-
-    </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </section>
   );
 };
 
