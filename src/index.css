@@ -65,6 +65,8 @@
 
   --sidebar-width: 308px;
 
+  --z-budget-status: 4;
+  --z-topbar: 20;
   --z-dropdown: 1000;
   --z-popover: 1050;
   --z-popover-backdrop: 1049;
@@ -88,7 +90,7 @@ body {
   background:
     radial-gradient(circle at 14% 0%, rgba(52, 127, 148, 0.12), transparent 36%),
     radial-gradient(circle at 90% 8%, rgba(217, 180, 106, 0.14), transparent 32%),
-    linear-gradient(180deg, #f7fbff 0%, var(--bg-app) 48%, #eef4f8 100%);
+    linear-gradient(180deg, var(--bg-muted) 0%, var(--bg-app) 48%, var(--bg-app) 100%);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
 }
@@ -140,7 +142,7 @@ a:hover {
   border-bottom: 1px solid var(--color-neutral-200);
   box-shadow: var(--shadow-sm);
   position: relative;
-  z-index: 20;
+  z-index: var(--z-topbar);
 }
 
 .topbar-grid {
@@ -227,7 +229,7 @@ a:hover {
 .budget-status-banner {
   position: sticky;
   top: 0;
-  z-index: 4;
+  z-index: var(--z-budget-status);
   margin: var(--space-4) var(--space-6) 0;
   border-radius: var(--radius-md);
   border: 1px solid rgba(31, 79, 96, 0.16);
@@ -477,6 +479,7 @@ a:hover {
   display: grid;
   gap: var(--space-4);
   grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 1280px;
 }
 
 .workspace-card {
@@ -488,14 +491,14 @@ a:hover {
 }
 
 .workspace-card:hover {
-  border-color: #d2dce7;
+  border-color: var(--color-neutral-300);
   box-shadow: var(--shadow-md);
 }
 
 .workspace-card-header {
   border-bottom: 1px solid var(--color-neutral-200);
   padding: var(--space-4);
-  background: linear-gradient(180deg, #fcfeff 0%, #f7fbff 100%);
+  background: linear-gradient(180deg, var(--bg-surface) 0%, var(--bg-muted) 100%);
   border-top-left-radius: var(--radius-lg) !important;
   border-top-right-radius: var(--radius-lg) !important;
 }
@@ -968,6 +971,10 @@ a:hover {
   .table th {
     padding: 0.7rem 0.6rem;
   }
+
+  .vote-btn {
+    padding: 5px 10px;
+  }
 }
 
 /* Vote button */
@@ -982,7 +989,7 @@ a:hover {
   padding: 2px 8px;
   font-size: var(--font-size-xs);
   cursor: pointer;
-  transition: all 0.15s ease;
+  transition: all var(--transition-fast);
   line-height: 1.4;
   white-space: nowrap;
 }
@@ -1085,7 +1092,7 @@ a:hover {
   font: inherit;
   cursor: pointer;
   color: var(--color-neutral-700);
-  transition: all 0.15s;
+  transition: all var(--transition-fast);
 }
 
 .clock-header-segment.active {

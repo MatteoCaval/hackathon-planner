@@ -1,7 +1,7 @@
 import React, { useMemo, useState, useRef, useEffect } from 'react';
 import { Card, Form, Row, Col, Button, Alert } from 'react-bootstrap';
 import { Flight, Accommodation, ExtraCost, PlannerSettings, BudgetAttempt } from '../types';
-import { FaPlane, FaBed, FaCalculator, FaPlus, FaTrash, FaFlask, FaSync } from 'react-icons/fa';
+import { FaPlane, FaBed, FaCalculator, FaPlus, FaTrash, FaFlask, FaSync, FaHotel } from 'react-icons/fa';
 import { calculateBudgetSnapshot, formatCurrency } from '../utils/budget';
 
 interface Props {
@@ -65,13 +65,13 @@ const AccommodationDropdown: React.FC<{
         style={{
           width: '100%', display: 'flex', alignItems: 'center', gap: 8,
           padding: '6px 10px', background: 'var(--bs-body-bg)', border: '1px solid var(--bs-border-color)',
-          borderRadius: 6, cursor: 'pointer', textAlign: 'left', color: 'var(--bs-body-color)'
+          borderRadius: 'var(--radius-xs)', cursor: 'pointer', textAlign: 'left', color: 'var(--bs-body-color)'
         }}
       >
         {selected ? (
           <>
             {selected.imageUrl && (
-              <img src={selected.imageUrl} alt="" style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />
+              <img src={selected.imageUrl} alt="" style={{ width: 32, height: 32, objectFit: 'cover', borderRadius: 'var(--radius-xs)', flexShrink: 0 }} />
             )}
             <span className="small flex-grow-1">{formatCurrency(selected.totalPrice)} — {selected.description || 'Accommodation option'}</span>
           </>
@@ -105,9 +105,9 @@ const AccommodationDropdown: React.FC<{
               className="dropdown-item"
             >
               {acc.imageUrl ? (
-                <img src={acc.imageUrl} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, flexShrink: 0 }} />
+                <img src={acc.imageUrl} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 'var(--radius-xs)', flexShrink: 0 }} />
               ) : (
-                <div style={{ width: 40, height: 40, borderRadius: 4, flexShrink: 0, background: 'var(--bs-secondary-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16 }}>🏨</div>
+                <div style={{ width: 40, height: 40, borderRadius: 'var(--radius-xs)', flexShrink: 0, background: 'var(--bs-secondary-bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 16, color: 'var(--bs-secondary-color)' }}><FaHotel /></div>
               )}
               <div className="small">
                 <div>{acc.description || 'Accommodation option'}</div>
@@ -308,7 +308,7 @@ const BudgetCalculator: React.FC<Props> = ({
         <Card.Header className="workspace-card-header">
           <div className="d-flex align-items-center justify-content-between gap-2 flex-wrap">
             <div>
-              <h3 className="workspace-card-title m-0">Saved Scenarios</h3>
+              <h2 className="workspace-card-title m-0">Saved Scenarios</h2>
               <p className="subtle-text mb-0">Save up to 5 budget scenarios to compare options.</p>
             </div>
             <Button
@@ -373,7 +373,7 @@ const BudgetCalculator: React.FC<Props> = ({
         <Col xl={12}>
           <Card className="workspace-card h-100">
             <Card.Header className="workspace-card-header">
-              <h3 className="workspace-card-title m-0">Cost Inputs</h3>
+              <h2 className="workspace-card-title m-0">Cost Inputs</h2>
             </Card.Header>
             <Card.Body>
               <Form.Group className="mb-4">
@@ -400,7 +400,7 @@ const BudgetCalculator: React.FC<Props> = ({
                             {formatCurrency(flight.pricePerPerson)} per person
                             {(flight.arrivalTime || flight.departureTime) && (
                               <span className="ms-2">
-                                {flight.arrivalTime && <span>✈ arrives {flight.arrivalTime}</span>}
+                                {flight.arrivalTime && <span><FaPlane size={10} className="me-1" />arrives {flight.arrivalTime}</span>}
                                 {flight.arrivalTime && flight.departureTime && <span className="mx-1">·</span>}
                                 {flight.departureTime && <span>departs {flight.departureTime}</span>}
                               </span>

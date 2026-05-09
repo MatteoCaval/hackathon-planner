@@ -626,6 +626,7 @@ function App() {
   const isTripSyncAvailable = isFirebaseConfigured && firebaseDatabase !== null;
   const normalizedSyncedCode = normalizeTripCode(syncedTripCode);
   const isSyncing = normalizedSyncedCode.length >= TRIP_CODE_MIN_LENGTH && isTripSyncAvailable;
+  const syncMeta = () => ({ updatedAt: Date.now(), updatedBy: syncClientId });
 
   // Auto-join from ?trip=CODE in URL
   useEffect(() => {
@@ -659,7 +660,7 @@ function App() {
       } else {
         const payload: TripSyncPayload = {
           destinations, settings, tripMembers, votes,
-          meta: { updatedAt: Date.now(), updatedBy: syncClientId }
+          meta: syncMeta()
         };
         return set(ref(database, `trips/${code}`), payload).then(() => {
           setSyncedTripCode(code);
@@ -785,7 +786,7 @@ function App() {
     // Atomic multi-path update: data + meta in a single write
     const updates: Record<string, unknown> = {
       [`trips/${normalizedSyncedCode}/${subPath}`]: data,
-      [`trips/${normalizedSyncedCode}/meta`]: { updatedAt: Date.now(), updatedBy: syncClientId }
+      [`trips/${normalizedSyncedCode}/meta`]: syncMeta()
     };
     update(ref(firebaseDatabase), updates)
       .then(() => setSyncStatus('synced'))
@@ -961,7 +962,7 @@ function App() {
         // No remote — create trip from local data
         const payload: TripSyncPayload = {
           destinations, settings, tripMembers, votes,
-          meta: { updatedAt: Date.now(), updatedBy: syncClientId }
+          meta: syncMeta()
         };
         await set(ref(firebaseDatabase, `trips/${code}`), payload);
         setSyncedTripCode(code);
@@ -1091,11 +1092,14 @@ function App() {
                 <Button size="sm" variant="outline-secondary" onClick={handleLeaveTrip}>Leave</Button>
               </div>
             ) : (
-              <div className="d-flex gap-2 align-items-center">
-                <Form.Control size="sm" value={tripCodeInput} onChange={(e) => setTripCodeInput(normalizeTripCode(e.target.value))} placeholder="Trip code" aria-label="Trip code to join" autoCapitalize="characters" autoCorrect="off" spellCheck={false} onKeyDown={(e) => { if (e.key === 'Enter') void handleJoinTrip(); }} />
-                <Button size="sm" variant="outline-secondary" onClick={handleJoinTrip} disabled={!isTripSyncAvailable || normalizeTripCode(tripCodeInput).length < TRIP_CODE_MIN_LENGTH || isJoining}>
-                  {isJoining ? <Spinner animation="border" size="sm" /> : 'Join'}
-                </Button>
+              <div>
+                <div className="d-flex gap-2 align-items-center">
+                  <Form.Control size="sm" value={tripCodeInput} onChange={(e) => setTripCodeInput(normalizeTripCode(e.target.value))} placeholder="Trip code" aria-label="Trip code to join" autoCapitalize="characters" autoCorrect="off" spellCheck={false} onKeyDown={(e) => { if (e.key === 'Enter') void handleJoinTrip(); }} />
+                  <Button size="sm" variant="outline-secondary" onClick={handleJoinTrip} disabled={!isTripSyncAvailable || normalizeTripCode(tripCodeInput).length < TRIP_CODE_MIN_LENGTH || isJoining}>
+                    {isJoining ? <Spinner animation="border" size="sm" /> : 'Join'}
+                  </Button>
+                </div>
+                <Form.Text className="text-muted">Enter a shared trip code to sync and collaborate in real time.</Form.Text>
               </div>
             )}
             {!isTripSyncAvailable && (
