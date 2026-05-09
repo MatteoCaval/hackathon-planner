@@ -1,14 +1,14 @@
 import React, { useRef } from 'react';
 import { Button } from 'react-bootstrap';
 import { FaFileDownload, FaFileUpload } from 'react-icons/fa';
-import { Destination } from '../types';
+import { Destination, TripExport } from '../types';
 
 interface Props {
   destinations: Destination[];
-  onImport: (data: Destination[]) => void;
+  onImport: (data: TripExport | Destination[]) => void;
 }
 
-const DataPersistence: React.FC<Props> = ({ destinations, onImport }) => {
+const DataPersistence: React.FC<Props> = ({ destinations, onImport }: Props) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [status, setStatus] = React.useState<{ kind: 'success' | 'error'; message: string } | null>(null);
 
@@ -46,7 +46,23 @@ const DataPersistence: React.FC<Props> = ({ destinations, onImport }) => {
         const json = e.target?.result as string;
         const parsedData = JSON.parse(json);
 
-        if (Array.isArray(parsedData)) {
+        const parsed: unknown = parsedData;
+        if (
+          parsed !== null &&
+          typeof parsed === 'object' &&
+          !Array.isArray(parsed) &&
+          (parsed as Record<string, unknown>).exportVersion === 1 &&
+          Array.isArray((parsed as Record<string, unknown>).destinations)
+        ) {
+          const envelope = parsed as TripExport;
+          const count = envelope.destinations.length;
+          if (count === 0) {
+            setStatus({ kind: 'error', message: 'Trip file contains no destinations.' });
+          } else {
+            onImport(envelope);
+            setStatus({ kind: 'success', message: `Imported trip: ${count} destination${count !== 1 ? 's' : ''}, settings, and members.` });
+          }
+        } else if (Array.isArray(parsedData)) {
             const isValid = parsedData.every((item: unknown) => {
               if (!item || typeof item !== 'object' || Array.isArray(item)) return false;
               const d = item as Record<string, unknown>;
@@ -62,7 +78,7 @@ const DataPersistence: React.FC<Props> = ({ destinations, onImport }) => {
                 setStatus({ kind: 'error', message: 'Invalid file format. Each destination must have id, name, and valid coordinates.' });
             }
         } else {
-            setStatus({ kind: 'error', message: 'Invalid file format. Data must be an array.' });
+            setStatus({ kind: 'error', message: 'Invalid file format. Expected a trip export file.' });
         }
       } catch (error) {
         console.error('Error importing data:', error);

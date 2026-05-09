@@ -395,6 +395,10 @@ a:hover {
   color: var(--color-danger);
 }
 
+.nav-item-clone:hover {
+  color: var(--color-brand-600, #0d6efd);
+}
+
 .sidebar-empty {
   margin-top: var(--space-8);
   text-align: center;

@@ -8,7 +8,8 @@ import AddDestinationModal from './components/AddDestinationModal';
 import DataPersistence from './components/DataPersistence';
 import PersistentBudgetStatus from './components/PersistentBudgetStatus';
 import { useLocalStorage } from './useLocalStorage';
-import { Accommodation, BudgetAttempt, BudgetEstimatorState, Destination, ExtraCost, Flight, PlannerSettings, SearchLinkTemplate, TripVotes } from './types';
+import { v4 as uuidv4 } from 'uuid';
+import { Accommodation, BudgetAttempt, BudgetEstimatorState, Destination, ExtraCost, Flight, PlannerSettings, SearchLinkTemplate, TripExport, TripVotes } from './types';
 import { DEFAULT_SEARCH_LINKS } from './utils/bookingLinks';
 import PersonSelector from './components/PersonSelector';
 import VoteSummary from './components/VoteSummary';
@@ -856,6 +857,94 @@ function App() {
     syncToFirebase('destinations', normalizedData);
   };
 
+  const handleCloneTrip = () => {
+    if (destinations.length === 0) return;
+
+    const clonedDestinations: Destination[] = destinations.map((dest) => {
+      const flightIdMap: Record<string, string> = {};
+      const newFlights: Flight[] = dest.flights.map((f) => {
+        const newId = uuidv4();
+        flightIdMap[f.id] = newId;
+        return { ...f, id: newId };
+      });
+
+      const accIdMap: Record<string, string> = {};
+      const newAccommodations: Accommodation[] = dest.accommodations.map((a) => {
+        const newId = uuidv4();
+        accIdMap[a.id] = newId;
+        return { ...a, id: newId };
+      });
+
+      const remappedFlightAssignments: Record<string, number> = {};
+      for (const [oldId, count] of Object.entries(dest.budgetEstimator.flightAssignments)) {
+        if (flightIdMap[oldId]) remappedFlightAssignments[flightIdMap[oldId]] = count;
+      }
+
+      const attemptIdMap: Record<string, string> = {};
+      const remappedAttempts: BudgetAttempt[] = dest.budgetEstimator.attempts.map((attempt) => {
+        const newAttemptId = uuidv4();
+        attemptIdMap[attempt.id] = newAttemptId;
+        const remappedAttemptFlights: Record<string, number> = {};
+        for (const [oldId, count] of Object.entries(attempt.flightAssignments)) {
+          if (flightIdMap[oldId]) remappedAttemptFlights[flightIdMap[oldId]] = count;
+        }
+        return {
+          ...attempt,
+          id: newAttemptId,
+          selectedAccommodationId: accIdMap[attempt.selectedAccommodationId] ?? attempt.selectedAccommodationId,
+          flightAssignments: remappedAttemptFlights,
+        };
+      });
+
+      return {
+        ...dest,
+        id: uuidv4(),
+        flights: newFlights,
+        accommodations: newAccommodations,
+        budgetEstimator: {
+          flightAssignments: remappedFlightAssignments,
+          selectedAccommodationId: accIdMap[dest.budgetEstimator.selectedAccommodationId] ?? dest.budgetEstimator.selectedAccommodationId,
+          fixedAttemptId: attemptIdMap[dest.budgetEstimator.fixedAttemptId] ?? '',
+          attempts: remappedAttempts,
+        },
+      };
+    });
+
+    const exportPayload: TripExport = {
+      exportVersion: 1,
+      exportedAt: new Date().toISOString(),
+      destinations: clonedDestinations,
+      settings,
+      tripMembers,
+    };
+
+    const blob = new Blob([JSON.stringify(exportPayload, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `hackathon-trip-clone-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+  };
+
+  const handleImportTrip = (payload: TripExport | Destination[]) => {
+    if (Array.isArray(payload)) {
+      handleImport(payload);
+      return;
+    }
+    const normalizedDestinations = payload.destinations.map((d) => normalizeDestination(d as LegacyDestination));
+    const normalizedSettings = normalizeSettings(payload.settings, DEFAULT_SETTINGS);
+    const normalizedMembers = normalizeTripMembers(payload.tripMembers);
+    setDestinations(normalizedDestinations);
+    setSettings(normalizedSettings);
+    setTripMembers(normalizedMembers);
+    setVotes(DEFAULT_VOTES);
+    if (normalizedDestinations.length > 0) setActiveId(normalizedDestinations[0].id);
+    syncToFirebase('destinations', normalizedDestinations);
+  };
+
   const updateSettings = (next: PlannerSettings) => {
     setSettings(next);
     syncToFirebase('settings', next);
@@ -1106,7 +1195,7 @@ function App() {
           <hr />
 
           <h6 className="text-uppercase text-muted small fw-bold mb-2">Data</h6>
-          <DataPersistence destinations={destinations} onImport={handleImport} />
+          <DataPersistence destinations={destinations} onImport={handleImportTrip} />
         </Offcanvas.Body>
       </Offcanvas>
 
@@ -1117,6 +1206,7 @@ function App() {
           onSelect={(id) => { setActiveId(id); setActiveSection('overview'); }}
           onAddClick={() => setShowAddModal(true)}
           onRemove={handleRemoveDestination}
+          onCloneTrip={handleCloneTrip}
           votes={votes.destinations}
           currentPerson={currentPerson}
           onToggleVote={(destId) => handleToggleVote('destinations', destId)}

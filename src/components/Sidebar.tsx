@@ -1,7 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { Nav, Button, Form, Modal } from 'react-bootstrap';
 import { Destination } from '../types';
-import { FaMapMarkerAlt, FaPlus, FaTrash, FaSearch, FaExclamationTriangle } from 'react-icons/fa';
+import { FaMapMarkerAlt, FaPlus, FaTrash, FaSearch, FaExclamationTriangle, FaCopy } from 'react-icons/fa';
 import VoteButton from './VoteButton';
 
 type SidebarSort = 'added' | 'name-asc' | 'name-desc' | 'votes';
@@ -12,12 +12,13 @@ interface Props {
   onSelect: (id: string) => void;
   onAddClick: () => void;
   onRemove: (id: string) => void;
+  onCloneTrip: () => void;
   votes: Record<string, string[]>;
   currentPerson: string;
   onToggleVote: (destId: string) => void;
 }
 
-const Sidebar: React.FC<Props> = ({ destinations, activeId, onSelect, onAddClick, onRemove, votes, currentPerson, onToggleVote }) => {
+const Sidebar: React.FC<Props> = ({ destinations, activeId, onSelect, onAddClick, onRemove, onCloneTrip, votes, currentPerson, onToggleVote }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [pendingRemove, setPendingRemove] = useState<{ id: string; name: string } | null>(null);
   const [sortBy, setSortBy] = useState<SidebarSort>('added');
@@ -96,6 +97,15 @@ const Sidebar: React.FC<Props> = ({ destinations, activeId, onSelect, onAddClick
                   currentPerson={currentPerson}
                   onToggle={() => onToggleVote(destination.id)}
                 />
+                <button
+                  type="button"
+                  className="nav-item-remove nav-item-clone"
+                  onClick={(e) => { e.stopPropagation(); onCloneTrip(); }}
+                  aria-label="Clone entire trip as download"
+                  title="Clone trip (download JSON)"
+                >
+                  <FaCopy size={12} />
+                </button>
                 <button
                   type="button"
                   className="nav-item-remove"

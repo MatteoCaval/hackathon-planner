@@ -85,4 +85,12 @@ export interface TripVotes {
   accommodations: Record<string, string[]>;
 }
 
+export interface TripExport {
+  exportVersion: 1;
+  exportedAt: string;
+  destinations: Destination[];
+  settings: PlannerSettings;
+  tripMembers: string[];
+}
+
 export const DUBLIN_COORDS: [number, number] = [53.3498, -6.2603];
