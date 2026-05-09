@@ -647,8 +647,15 @@ const AccommodationManager: React.FC<Props> = ({
                       bg="info"
                       className="fw-normal"
                       role="button"
+                      tabIndex={0}
                       style={{ cursor: 'pointer', fontSize: '0.75rem' }}
                       onClick={() => setDraftValue({ startDate: r.startDate, endDate: r.endDate })}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter' || e.key === ' ') {
+                          e.preventDefault();
+                          setDraftValue({ startDate: r.startDate, endDate: r.endDate });
+                        }
+                      }}
                     >
                       {r.label}
                     </Badge>
