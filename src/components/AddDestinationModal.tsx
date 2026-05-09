@@ -122,7 +122,7 @@ const AddDestinationModal: React.FC<Props> = ({ show, onHide, onAdd }) => {
       <Modal.Body>
         <Form noValidate>
           <Form.Group className="mb-4">
-            <Form.Label className="text-muted small fw-bold">CITY NAME</Form.Label>
+            <Form.Label className="small text-muted mb-1">City name</Form.Label>
             <InputGroup>
               <InputGroup.Text className="bg-white border-end-0">
                 <FaSearch className="text-muted" />
@@ -155,7 +155,7 @@ const AddDestinationModal: React.FC<Props> = ({ show, onHide, onAdd }) => {
           <div className="row g-3">
             <div className="col-6">
               <Form.Group>
-                <Form.Label className="text-muted small fw-bold">LATITUDE</Form.Label>
+                <Form.Label className="small text-muted mb-1">Latitude</Form.Label>
                 <Form.Control
                   type="number"
                   value={newLat}
@@ -169,7 +169,7 @@ const AddDestinationModal: React.FC<Props> = ({ show, onHide, onAdd }) => {
             </div>
             <div className="col-6">
               <Form.Group>
-                <Form.Label className="text-muted small fw-bold">LONGITUDE</Form.Label>
+                <Form.Label className="small text-muted mb-1">Longitude</Form.Label>
                 <Form.Control
                   type="number"
                   value={newLng}
